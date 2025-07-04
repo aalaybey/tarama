@@ -17,27 +17,42 @@ s3 = boto3.client(
     region_name=AWS_REGION,
 )
 
+
 def trigger_exists():
     try:
         s3.head_object(Bucket=S3_BUCKET, Key=TRIGGER_KEY)
         return True
-    except:
+    except Exception:
         return False
+
 
 def delete_trigger():
     try:
         s3.delete_object(Bucket=S3_BUCKET, Key=TRIGGER_KEY)
-    except:
+    except Exception:
         pass
+
 
 def run_y_oto():
     try:
         print(">>> y_oto.py başlatılıyor...")
-        proc = subprocess.Popen(["python", "y_oto.py"])
+
+        # un-buffered çalıştır, çıktıları anında al
+        proc = subprocess.Popen(
+            ["python", "-u", "y_oto.py"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+
+        for line in proc.stdout:
+            print(line, end="", flush=True)
+
         proc.wait()
         print(">>> y_oto.py tamamlandı.")
     except Exception as e:
         print("y_oto.py çalıştırılamadı:", e)
+
 
 def main():
     print("trigger.py aktif. S3 trigger bekleniyor.")
@@ -49,6 +64,7 @@ def main():
             run_y_oto()
             is_running = False
         time.sleep(5)  # 5 saniyede bir kontrol
+
 
 if __name__ == "__main__":
     main()
