@@ -512,9 +512,20 @@ def insert_data_to_db(cursor, ticker, data):
             cursor.execute(sql, (ticker, metric, period, str(value) if value is not None else None))
 
 def upload_changed_to_db(changed_tickers):
+    db_user = os.getenv("DB_USER")
+    db_pass = os.getenv("DB_PASS")
+    db_host = os.getenv("DB_HOST")
+    db_port = os.getenv("DB_PORT", "5432")
+    db_name = os.getenv("DB_NAME")
+
     conn = psycopg2.connect(
-        "postgresql://postgres.tbycsyjdipqakbowpaad:!!Alay861646@aws-0-eu-north-1.pooler.supabase.com:6543/postgres"
+        host=db_host,
+        port=db_port,
+        user=db_user,
+        password=db_pass,
+        dbname=db_name
     )
+
     cursor = conn.cursor()
     for ticker in changed_tickers:
         fpath = s3_path(f"Final2/{ticker}.xlsx")
