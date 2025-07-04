@@ -1,7 +1,11 @@
-import boto3
 import os
 import time
-import subprocess
+import boto3
+import runpy
+import sys
+
+# ── stdout’u satır satır anında Render’a gönder ──
+sys.stdout.reconfigure(line_buffering=True)
 
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET")
@@ -18,7 +22,7 @@ s3 = boto3.client(
 )
 
 
-def trigger_exists():
+def trigger_exists() -> bool:
     try:
         s3.head_object(Bucket=S3_BUCKET, Key=TRIGGER_KEY)
         return True
@@ -26,36 +30,26 @@ def trigger_exists():
         return False
 
 
-def delete_trigger():
+def delete_trigger() -> None:
     try:
         s3.delete_object(Bucket=S3_BUCKET, Key=TRIGGER_KEY)
     except Exception:
         pass
 
 
-def run_y_oto():
+def run_y_oto() -> None:
+    """y_oto.py’yi AYNI süreçte çalıştır, tüm print’ler direkt log’da görünür."""
     try:
         print(">>> y_oto.py başlatılıyor...")
-
-        # un-buffered çalıştır, çıktıları anında al
-        proc = subprocess.Popen(
-            ["python", "-u", "y_oto.py"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-
-        for line in proc.stdout:
-            print(line, end="", flush=True)
-
-        proc.wait()
+        # y_oto.py içindeki __main__ bloğu da çalışsın
+        runpy.run_path("y_oto.py", run_name="__main__")
         print(">>> y_oto.py tamamlandı.")
     except Exception as e:
         print("y_oto.py çalıştırılamadı:", e)
 
 
-def main():
-    print("trigger.py aktif. S3 trigger bekleniyor.")
+def main() -> None:
+    print("trigger.py aktif. S3’te trigger.txt bekleniyor…")
     is_running = False
     while True:
         if not is_running and trigger_exists():
