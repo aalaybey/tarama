@@ -143,8 +143,8 @@ PROXIES = load_proxies_from_file(PROXY_FILE)
 EMAILS = load_emails_from_file(EMAILS_FILE)
 
 SCRIPTS = [
-    "a1.py"
-    "a2.py"
+    "a1.py",
+    "a2.py",
 ]
 
 # ---- YENİ: Proxy kullanımını takip eden set ve lock
