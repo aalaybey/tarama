@@ -1,0 +1,8 @@
+boto3
+openpyxl
+pandas
+psycopg2-binary
+requests
+yfinance
+beautifulsoup4
+portalocker
