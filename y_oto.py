@@ -844,6 +844,8 @@ def main():
         for i, ftype in enumerate(forms):
             if ftype not in ["10-Q", "10-K"]:
                 continue
+            if i >= len(report_dates) or not report_dates[i] or not report_dates[i].strip():
+                continue
             try:
                 rpt_date = datetime.strptime(report_dates[i], "%Y-%m-%d")
             except:
@@ -865,6 +867,10 @@ def main():
                 extract_metrics(file_path, sym, y, q)
                 found = True
                 break  # Son 1 dosya yeterli, diğerlerini alma
+
+        if not found:
+            print(f"Son {days} günde {ticker} için yeni finansal bulunamadı!")
+            return
 
         if not found:
             print(f"Son {days} günde {ticker} için yeni finansal bulunamadı!")
