@@ -19,7 +19,7 @@ import random
 import psycopg2
 
 # ----------- PARAMETRELER VE AYARLAR -----------
-DAYS = 90   # Buradaki günü değiştirerek aranan dosya gün filtresini ayarlayabilirsin (örn: 1, 3, 7)
+DAYS = 100   # Buradaki günü değiştirerek aranan dosya gün filtresini ayarlayabilirsin (örn: 1, 3, 7)
 
 AWS_BUCKET = "alaybey"
 AWS_REGION = os.getenv("AWS_REGION")
@@ -841,23 +841,17 @@ def main():
         report_dates = data.get("reportDate", [])
 
         found = False
-        N = min(len(forms), len(report_dates), len(accessions))
-        for i in range(N):
-            ftype = forms[i]
-            rd = report_dates[i]
-            acc = accessions[i]
+        for i, ftype in enumerate(forms):
             if ftype not in ["10-Q", "10-K"]:
                 continue
-            if not rd or not rd.strip():
-                continue
             try:
-                rpt_date = datetime.strptime(rd.strip(), "%Y-%m-%d")
-            except Exception:
+                rpt_date = datetime.strptime(report_dates[i], "%Y-%m-%d")
+            except:
                 continue
             filter_date = (datetime.now(UTC) - timedelta(days=days)).date()
             if rpt_date.date() < filter_date:
                 continue
-            acc = acc.replace("-", "")
+            acc = accessions[i].replace("-", "")
             year = str(rpt_date.year)
             month = rpt_date.month
             quarter_idx = (month - 1) // 3 + 1
@@ -870,7 +864,7 @@ def main():
             if file_path and sym and y and q:
                 extract_metrics(file_path, sym, y, q)
                 found = True
-                break
+                break  # Son 1 dosya yeterli, diğerlerini alma
 
         if not found:
             print(f"Son {days} günde {ticker} için yeni finansal bulunamadı!")
