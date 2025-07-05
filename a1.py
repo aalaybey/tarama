@@ -14,6 +14,8 @@ import time
 import threading
 import boto3
 from io import BytesIO, StringIO
+from botocore.client import Config  # Dosyanın başına ekle
+
 
 consecutive_error_count = 0
 
@@ -21,20 +23,25 @@ REQUEST_COUNT = 0
 REQUEST_LOCK = threading.Lock()
 
 AWS_BUCKET = "alaybey"
-S3_PREFIX = "s3/"
 AWS_REGION = os.getenv("AWS_REGION")
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET")
+
+ENDPOINT_URL = f"https://s3.{AWS_REGION}.wasabisys.com"
 
 s3 = boto3.client(
     "s3",
     region_name=AWS_REGION,
     aws_access_key_id=AWS_ACCESS_KEY_ID,
     aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    endpoint_url=ENDPOINT_URL,
+    config=Config(signature_version="s3v4"),
 )
 
 def s3_path(key):  # Her path için kullan
-    return S3_PREFIX + key if not key.startswith(S3_PREFIX) else key
+    rel_path = key.replace("\\", "/").replace("./", "")
+    return rel_path.lstrip("/")
+
 
 def s3_exists(key):
     try:
