@@ -50,7 +50,6 @@ def main():
     is_running = False
     while True:
         keys = get_trigger_keys()
-        print("DEBUG - Bucket'taki dosyalar:", keys)
         if not is_running and keys:
             is_running = True
             for key in keys:
