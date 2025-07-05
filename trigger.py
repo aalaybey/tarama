@@ -22,14 +22,12 @@ s3 = boto3.client(
     config=Config(signature_version="s3v4"),
 )
 
-def get_trigger_keys():
+def trigger_exists():
     try:
-        resp = s3.list_objects_v2(Bucket=S3_BUCKET)
-        keys = [obj['Key'] for obj in resp.get('Contents', []) if obj['Key'] == 'trigger.txt']
-        return keys
+        s3.head_object(Bucket=S3_BUCKET, Key="trigger.txt")
+        return True
     except Exception:
-        return []
-
+        return False
 
 def delete_trigger(key):
     try:
@@ -46,19 +44,17 @@ def run_y_oto():
         print("y_oto.py çalıştırılamadı:", e)
 
 def main():
-    print("trigger.py aktif. S3’te trigger*.txt bekleniyor…")
+    print("trigger.py aktif. S3’te trigger.txt bekleniyor…")
     is_running = False
     while True:
-        keys = get_trigger_keys()
-        if not is_running and keys:
+        if not is_running and trigger_exists():
             is_running = True
-            for key in keys:
-                print(f"Tetikleyici bulundu: {key}")
-                try:
-                    run_y_oto()
-                finally:
-                    delete_trigger(key)
-                    print(f"{key} silindi.")
+            print("Tetikleyici bulundu: trigger.txt")
+            try:
+                run_y_oto()
+            finally:
+                delete_trigger("trigger.txt")
+                print("trigger.txt silindi.")
             is_running = False
         time.sleep(5)
 
