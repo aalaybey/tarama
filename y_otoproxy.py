@@ -13,57 +13,10 @@ import threading
 import boto3
 from io import BytesIO, StringIO
 from botocore.client import Config
+
 import subprocess
 import random
 import psycopg2
-import psutil
-
-
-def cpu_throttle(threshold=75, min_sleep=1, max_sleep=10):
-    usage = psutil.cpu_percent(interval=0.2)
-    if usage > threshold:
-        sleep_time = min(max_sleep, (usage-threshold)/10 + min_sleep)
-        print(f"[CPU Throttle] CPU {usage:.1f}% → {sleep_time}s uykuya alınıyor.")
-        time.sleep(sleep_time)
-
-
-# --- User agent ve proxy listelerini oku ---
-def load_email_list(path="emailler.txt"):
-    emails = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if "@" in line:
-                if "<" in line and ">" in line:
-                    emails.append(line)
-                else:
-                    emails.append(line)
-    emails = [e for e in emails if "@" in e]
-    return emails
-
-def load_proxy_list(path="sec_calısan_proxyler.txt"):
-    proxies = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line and "@" in line and ":" in line:
-                proxies.append(line)
-    return proxies
-
-EMAIL_LIST = load_email_list()
-PROXY_LIST = load_proxy_list()
-
-def random_headers_and_proxy():
-    email = random.choice(EMAIL_LIST)
-    headers = {"User-Agent": email}
-    proxy = random.choice(PROXY_LIST)
-    proxies = {
-        "http": proxy,
-        "https": proxy,
-    }
-    print(f"LOG | Proxy: {proxy} | User-Agent: {email}")
-    return headers, proxies
-
 
 # ----------- PARAMETRELER VE AYARLAR -----------
 DAYS = 100   # Buradaki günü değiştirerek aranan dosya gün filtresini ayarlayabilirsin (örn: 1, 3, 7)
@@ -74,6 +27,9 @@ AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET")
 ENDPOINT_URL = f"https://s3.{AWS_REGION}.wasabisys.com"
 
+USER_AGENT = "Alper Alaybey <a.alaybey@gmail.com>"  # Kendi SEC-compliant agent
+HEADERS = {"User-Agent": USER_AGENT}
+
 s3 = boto3.client(
     "s3",
     region_name=AWS_REGION,
@@ -82,6 +38,31 @@ s3 = boto3.client(
     endpoint_url=ENDPOINT_URL,
     config=Config(signature_version="s3v4"),
 )
+
+import yfinance as yf
+import requests
+
+def get_yf_ticker_with_proxy(ticker, proxy_list, max_retries=5):
+    last_exc = None
+    for proxy in proxy_list:
+        try:
+            session = requests.Session()
+            session.proxies = {
+                "http": proxy,
+                "https": proxy,
+            }
+            session.headers.update({"User-Agent": "Mozilla/5.0 (compatible; AlperBot/1.0)"})
+            yf_ticker = yf.Ticker(ticker, session=session)
+            # ufak bir test (ör: shortName çekmeye çalış)
+            _ = yf_ticker.info.get("shortName", "")
+            return yf_ticker
+        except Exception as e:
+            last_exc = e
+            print(f"Proxy hatası, sıradaki proxyye geçiliyor: {proxy} -> {e}")
+            continue
+    # Hiçbiri çalışmazsa hata fırlat
+    raise Exception(f"Yahoo Finance proxy ile istek başarısız! Son hata: {last_exc}")
+
 
 def s3_path(key):  # Her path için kullan
     rel_path = key.replace("\\", "/").replace("./", "")
@@ -118,6 +99,7 @@ def s3_list_dir(prefix):
 
 # ----------- Tetikleyici dosyasından ticker çekme -----------
 def get_trigger_ticker():
+    """trigger.txt dosyasını okur, içindeki ticker'ı döndürür."""
     key = "trigger.txt"
     if not s3_exists(key):
         raise Exception("trigger.txt bulunamadı!")
@@ -126,8 +108,10 @@ def get_trigger_ticker():
         raise Exception("trigger.txt içinde ticker bulunamadı!")
     return ticker.upper(), key
 
+
 # ----------- tickers.txt'den cik numarası bulma -----------
 def get_cik_for_ticker(ticker, tickers_file="tickers.txt"):
+    """Aynı klasördeki tickers.txt'den (ör: AAPL,1234567890) ticker'a karşılık gelen cik'i bulur"""
     with open(tickers_file, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -140,6 +124,7 @@ def get_cik_for_ticker(ticker, tickers_file="tickers.txt"):
 
 # ----------- a1.py'den gelen diğer yardımcılar -----------
 def incr_request_and_sleep():
+    # Proxy yok, throttle sadece log
     incr_request_and_sleep.counter += 1
     if incr_request_and_sleep.counter % 10 == 0:
         print(f"🕒 {incr_request_and_sleep.counter} request atıldı, 0.5 sn bekleniyor...")
@@ -159,8 +144,7 @@ def download_file(url, s3key):
     while True:
         try:
             incr_request_and_sleep()
-            headers, proxies = random_headers_and_proxy()
-            resp = requests.get(url, headers=headers, proxies=proxies, timeout=30)
+            resp = requests.get(url, headers=HEADERS)
             if resp.status_code in [429, 403]:
                 backoff_count += 1
                 print(f"⏳ Rate-limit algılandı! {backoff_count}. kez 2 dakika bekleniyor... [download_file] {url}")
@@ -197,8 +181,7 @@ def download_xlsx(index_url, folder_path, file_name, is_10k=False):
     while True:
         try:
             incr_request_and_sleep()
-            headers, proxies = random_headers_and_proxy()
-            resp = requests.get(index_url, headers=headers, proxies=proxies, timeout=30)
+            resp = requests.get(index_url, headers=HEADERS)
             if resp.status_code in [429, 403]:
                 backoff_count += 1
                 print(f"⏳ Rate-limit algılandı! {backoff_count}. kez 2 dakika bekleniyor... [download_xlsx] {index_url}")
@@ -397,8 +380,6 @@ def s3_write_excel(df, key):
 
 def extract_metrics(file_path, symbol, year, quarter):
     print(f"📊 Veriler çıkarılıyor: {symbol} - {year} {quarter}")
-    cpu_throttle()
-
 
     try:
         wb = s3_load_workbook(file_path)
@@ -555,48 +536,11 @@ def extract_metrics(file_path, symbol, year, quarter):
     df_to_save = df.reset_index().rename(columns={"index": "Metric"})
     s3_write_excel(df_to_save, out_path)
 
-    # RAM temizliği (extract_metrics)
-    del wb
-    del df_to_save
-    if 'df_existing' in locals():
-        del df_existing
-    if 'df' in locals():
-        del df
-    import gc; gc.collect()
-
-
 import yfinance as yf
-
-from requests import Session
-
-def yf_ticker_with_proxy(symbol: str):
-    headers, proxies = random_headers_and_proxy()
-    s = Session()
-    s.headers.update(headers)
-    s.proxies.update(proxies)
-    return yf.Ticker(symbol, session=s)
-
-
-def safe_info(symbol, retries=3, wait=3):
-    """
-    Proxy / rate-limit hatasında yeni proxy ile tekrar dener
-    """
-    for n in range(retries):
-        try:
-            t = yf_ticker_with_proxy(symbol)
-            return t.info
-        except Exception as e:
-            print(f"{symbol} info deneme {n+1}/{retries} hata: {e}")
-            time.sleep(wait * (n+1))  # kademeli bekle
-    return {}
-
-
 
 def fill_dates_and_prices_in_ws(ws_dst):
     ticker = ws_dst["B40"].value
     index_ticker = ws_dst["C40"].value
-    cpu_throttle()
-
 
     if not ticker:
         print(f"B40 hücresinde ticker yok, atlanıyor.")
@@ -616,15 +560,12 @@ def fill_dates_and_prices_in_ws(ws_dst):
 
     def get_hist(ticker_code):
         try:
-            yf_ticker = yf_ticker_with_proxy(ticker_code)
+            yf_ticker = yf.Ticker(ticker_code)
             hist = yf_ticker.history(start=min_date.strftime("%Y-%m-%d"), end=(curr_date + timedelta(days=1)).strftime("%Y-%m-%d"))
             hist = hist.reset_index()
             if 'Date' in hist:
                 hist['Date'] = hist['Date'].dt.date
-            del yf_ticker
-            import gc; gc.collect()
             return hist
-
         except Exception as e:
             print(f"{ticker_code} için fiyat verisi alınamadı: {e}")
             return None
@@ -660,17 +601,11 @@ def fill_dates_and_prices_in_ws(ws_dst):
 
         prev_date = this_date
 
-    # RAM temizliği (fill_dates_and_prices_in_ws)
-    del hist_company
-    del hist_index
-    import gc; gc.collect()
-
-
 def create_final2_file_for_ticker(ticker):
+    """Final2 için tek bir ticker'ın dosyasını oluşturur."""
     final_folder = s3_path("Final")
-    cpu_throttle()
     final2_folder = s3_path("Final2")
-    template_path = s3_path("Companies1/donusturucu.xlsx")
+    template_path = s3_path("Companies1/donusturucu.xlsx")  # Şablon tek script için burada
 
     src_key = s3_path(f"Final/{ticker}.xlsx")
     if not s3_exists(src_key):
@@ -692,6 +627,7 @@ def create_final2_file_for_ticker(ticker):
         wb_dst = openpyxl.load_workbook(BytesIO(template_bytes), data_only=False)
         ws_dst = wb_dst.active
 
+        # Tüm hücreleri kopyala (ilk 36 satır, BG'ye kadar)
         from openpyxl.utils import column_index_from_string
         max_col = column_index_from_string("BG")
         max_row = 36
@@ -706,50 +642,55 @@ def create_final2_file_for_ticker(ticker):
 
         fill_dates_and_prices_in_ws(ws_dst)
 
-        yf_ticker = yf_ticker_with_proxy(ticker)
-        info = safe_info(ticker)
+        yf_ticker = get_yf_ticker_with_proxy(ticker, PROXY_LIST)
 
+        # E41: Sector
         try:
-            time.sleep(5)
-            ws_dst["E41"].value = info.get("sector", "")
+            ws_dst["E41"].value = yf_ticker.info.get("sector", "")
         except Exception as e:
             print(f"{ticker} - sector alınamadı: {e}")
             ws_dst["E41"].value = ""
 
+        # F41: Industry
         try:
-            time.sleep(5)
-            ws_dst["F41"].value = info.get("industry", "")
+            ws_dst["F41"].value = yf_ticker.info.get("industry", "")
         except Exception as e:
             print(f"{ticker} - industry alınamadı: {e}")
             ws_dst["F41"].value = ""
 
+        # G41: Employees
         try:
-            time.sleep(5)
-            ws_dst["G41"].value = info.get("fullTimeEmployees", "")
+            ws_dst["G41"].value = yf_ticker.info.get("fullTimeEmployees", "")
         except Exception as e:
             print(f"{ticker} - employees alınamadı: {e}")
             ws_dst["G41"].value = ""
 
+        # H41: Description/Summary
         try:
-            time.sleep(5)
-            summary = info.get("longBusinessSummary", info.get("summary", ""))
+            summary = yf_ticker.info.get("longBusinessSummary", yf_ticker.info.get("summary", ""))
             ws_dst["H41"].value = summary
         except Exception as e:
             print(f"{ticker} - description alınamadı: {e}")
             ws_dst["H41"].value = ""
 
+        # E45: Beta
         try:
-            time.sleep(5)
-            ws_dst["E45"].value = info.get("beta", "")
+            ws_dst["E45"].value = yf_ticker.info.get("beta", "")
         except Exception as e:
             print(f"{ticker} - beta alınamadı: {e}")
             ws_dst["E45"].value = ""
 
-        tnx_yield = safe_info("^TNX").get("regularMarketPrice", "")
-        ws_dst["F45"].value = tnx_yield
-
+        # F45: US 10-Year Treasury Yield
         try:
-            time.sleep(5)
+            tnx_ticker = get_yf_ticker_with_proxy("^TNX", PROXY_LIST)
+            tnx_yield = tnx_ticker.info.get("regularMarketPrice", "")
+            ws_dst["F45"].value = tnx_yield
+        except Exception as e:
+            print(f"{ticker} - US 10Y yield alınamadı: {e}")
+            ws_dst["F45"].value = ""
+
+        # I41: Earnings Date
+        try:
             cal = yf_ticker.calendar
             earning_date = ""
             if isinstance(cal, pd.DataFrame):
@@ -761,10 +702,9 @@ def create_final2_file_for_ticker(ticker):
         except Exception as e:
             print(f"{ticker} - earnings date alınamadı: {e}")
             ws_dst["I41"].value = ""
-        # RAM temizliği (yfinance ticker)
-        del yf_ticker
-        import gc; gc.collect()
 
+        # Formül fonksiyonları (excel python donusum.txt) -- burada opsiyonel!
+        # Bu dosya yoksa bu satırı devre dışı bırakabilirsin:
         try:
             with open("excel python donusum.txt", "r", encoding="utf-8") as f:
                 formul_code = f.read()
@@ -774,42 +714,18 @@ def create_final2_file_for_ticker(ticker):
         except Exception as e:
             print(f"Formül fonksiyonu hatası: {e}")
 
+        # Final2 dosyasını tekrar s3'e yükle
         buffer = BytesIO()
         wb_dst.save(buffer)
         buffer.seek(0)
         s3_write_bytes(dst_key, buffer.read())
         print(f"Final2 kaydedildi: {dst_key}")
-        # RAM temizliği (create_final2_file_for_ticker)
-        del wb_src
-        del ws_src
-        del wb_dst
-        del ws_dst
-        del buffer
-        del template_bytes
-        import gc; gc.collect()
-
 
     except Exception as e:
         print(f"Final2 oluşturulamadı: {e}")
-        # RAM temizliği (create_final2_file_for_ticker - except sonrası)
-        try: del wb_src
-        except: pass
-        try: del ws_src
-        except: pass
-        try: del wb_dst
-        except: pass
-        try: del ws_dst
-        except: pass
-        try: del buffer
-        except: pass
-        try: del template_bytes
-        except: pass
-        import gc; gc.collect()
-
 
 def get_data_from_excel(filepath, range_tuple):
     wb = openpyxl.load_workbook(BytesIO(s3_read_bytes(filepath)), data_only=True)
-    cpu_throttle()
     ws = wb.active
     start_col, start_row = range_tuple[0][0], int(range_tuple[0][1:])
     end_col, end_row = range_tuple[1][0], int(range_tuple[1][1:])
@@ -819,11 +735,6 @@ def get_data_from_excel(filepath, range_tuple):
         values = [cell.value for cell in row]
         data.append(values)
     return data
-    # RAM temizliği (get_data_from_excel)
-    del wb
-    del ws
-    import gc; gc.collect()
-
 
 def insert_company_info_to_db(cursor, ticker, sector, industry, employees, earnings_date, summary, radar=None, market_cap=None):
     sql = """
@@ -857,7 +768,6 @@ def insert_data_to_db(cursor, ticker, data):
 
 def upload_to_db(ticker):
     db_user = os.getenv("DB_USER")
-    cpu_throttle()
     db_pass = os.getenv("DB_PASS")
     db_host = os.getenv("DB_HOST")
     db_port = os.getenv("DB_PORT", "5432")
@@ -882,6 +792,7 @@ def upload_to_db(ticker):
         insert_data_to_db(cursor, ticker, data)
         conn.commit()
 
+        # --- GENEL FİRMASAL VERİLERİ EKLE ---
         wb = openpyxl.load_workbook(BytesIO(s3_read_bytes(fpath)), data_only=True)
         ws = wb.active
         sector = ws["B204"].value
@@ -898,24 +809,13 @@ def upload_to_db(ticker):
 
         conn.commit()
         print(f"{ticker} yüklendi.")
-        # RAM temizliği (upload_to_db)
-        del wb
-        del ws
-        import gc; gc.collect()
-
     except Exception as e:
         print(f"{ticker} hata: {e}")
-        try: del wb
-        except: pass
-        try: del ws
-        except: pass
-        import gc; gc.collect()
     cursor.close()
     conn.close()
 
 def main():
     try:
-        cpu_throttle()
         ticker, trigger_key = get_trigger_ticker()
         print(f"Tetiklenen şirket: {ticker}  | Trigger dosyası: {trigger_key}")
 
@@ -933,8 +833,7 @@ def main():
         while True:
             try:
                 incr_request_and_sleep()
-                headers, proxies = random_headers_and_proxy()
-                r = requests.get(url, headers=headers, proxies=proxies, timeout=30)
+                r = requests.get(url, headers=HEADERS)
                 if r.status_code in [429, 403]:
                     backoff_count += 1
                     print(f"⏳ Rate-limit algılandı! {backoff_count}. kez 2 dakika bekleniyor... [main] {url}")
@@ -968,7 +867,6 @@ def main():
 
         found = False
         for i, ftype in enumerate(forms):
-            cpu_throttle()
             if ftype not in ["10-Q", "10-K"]:
                 continue
             try:

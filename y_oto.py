@@ -39,31 +39,6 @@ s3 = boto3.client(
     config=Config(signature_version="s3v4"),
 )
 
-import yfinance as yf
-import requests
-
-def get_yf_ticker_with_proxy(ticker, proxy_list, max_retries=5):
-    last_exc = None
-    for proxy in proxy_list:
-        try:
-            session = requests.Session()
-            session.proxies = {
-                "http": proxy,
-                "https": proxy,
-            }
-            session.headers.update({"User-Agent": "Mozilla/5.0 (compatible; AlperBot/1.0)"})
-            yf_ticker = yf.Ticker(ticker, session=session)
-            # ufak bir test (ör: shortName çekmeye çalış)
-            _ = yf_ticker.info.get("shortName", "")
-            return yf_ticker
-        except Exception as e:
-            last_exc = e
-            print(f"Proxy hatası, sıradaki proxyye geçiliyor: {proxy} -> {e}")
-            continue
-    # Hiçbiri çalışmazsa hata fırlat
-    raise Exception(f"Yahoo Finance proxy ile istek başarısız! Son hata: {last_exc}")
-
-
 def s3_path(key):  # Her path için kullan
     rel_path = key.replace("\\", "/").replace("./", "")
     return rel_path.lstrip("/")
@@ -642,7 +617,7 @@ def create_final2_file_for_ticker(ticker):
 
         fill_dates_and_prices_in_ws(ws_dst)
 
-        yf_ticker = get_yf_ticker_with_proxy(ticker, PROXY_LIST)
+        yf_ticker = yf.Ticker(ticker)
 
         # E41: Sector
         try:
@@ -682,7 +657,7 @@ def create_final2_file_for_ticker(ticker):
 
         # F45: US 10-Year Treasury Yield
         try:
-            tnx_ticker = get_yf_ticker_with_proxy("^TNX", PROXY_LIST)
+            tnx_ticker = yf.Ticker("^TNX")
             tnx_yield = tnx_ticker.info.get("regularMarketPrice", "")
             ws_dst["F45"].value = tnx_yield
         except Exception as e:
