@@ -18,42 +18,6 @@ import subprocess
 import random
 import psycopg2
 
-# --- User agent ve proxy listelerini oku ---
-def load_email_list(path="emailler.txt"):
-    emails = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if "@" in line:
-                if "<" in line and ">" in line:
-                    emails.append(line)
-                else:
-                    emails.append(line)
-    emails = [e for e in emails if "@" in e]
-    return emails
-
-def load_proxy_list(path="sec_calısan_proxyler.txt"):
-    proxies = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line and "@" in line and ":" in line:
-                proxies.append(line)
-    return proxies
-
-EMAIL_LIST = load_email_list()
-PROXY_LIST = load_proxy_list()
-
-def random_headers_and_proxy():
-    email = random.choice(EMAIL_LIST)
-    headers = {"User-Agent": email}
-    proxy = random.choice(PROXY_LIST)
-    proxies = {
-        "http": proxy,
-        "https": proxy,
-    }
-    return headers, proxies
-
 # ----------- PARAMETRELER VE AYARLAR -----------
 DAYS = 100   # Buradaki günü değiştirerek aranan dosya gün filtresini ayarlayabilirsin (örn: 1, 3, 7)
 
@@ -62,6 +26,9 @@ AWS_REGION = os.getenv("AWS_REGION")
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET")
 ENDPOINT_URL = f"https://s3.{AWS_REGION}.wasabisys.com"
+
+USER_AGENT = "Alper Alaybey <a.alaybey@gmail.com>"  # Kendi SEC-compliant agent
+HEADERS = {"User-Agent": USER_AGENT}
 
 s3 = boto3.client(
     "s3",
@@ -107,6 +74,7 @@ def s3_list_dir(prefix):
 
 # ----------- Tetikleyici dosyasından ticker çekme -----------
 def get_trigger_ticker():
+    """trigger.txt dosyasını okur, içindeki ticker'ı döndürür."""
     key = "trigger.txt"
     if not s3_exists(key):
         raise Exception("trigger.txt bulunamadı!")
@@ -115,8 +83,10 @@ def get_trigger_ticker():
         raise Exception("trigger.txt içinde ticker bulunamadı!")
     return ticker.upper(), key
 
+
 # ----------- tickers.txt'den cik numarası bulma -----------
 def get_cik_for_ticker(ticker, tickers_file="tickers.txt"):
+    """Aynı klasördeki tickers.txt'den (ör: AAPL,1234567890) ticker'a karşılık gelen cik'i bulur"""
     with open(tickers_file, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -129,6 +99,7 @@ def get_cik_for_ticker(ticker, tickers_file="tickers.txt"):
 
 # ----------- a1.py'den gelen diğer yardımcılar -----------
 def incr_request_and_sleep():
+    # Proxy yok, throttle sadece log
     incr_request_and_sleep.counter += 1
     if incr_request_and_sleep.counter % 10 == 0:
         print(f"🕒 {incr_request_and_sleep.counter} request atıldı, 0.5 sn bekleniyor...")
@@ -148,8 +119,7 @@ def download_file(url, s3key):
     while True:
         try:
             incr_request_and_sleep()
-            headers, proxies = random_headers_and_proxy()
-            resp = requests.get(url, headers=headers, proxies=proxies, timeout=30)
+            resp = requests.get(url, headers=HEADERS)
             if resp.status_code in [429, 403]:
                 backoff_count += 1
                 print(f"⏳ Rate-limit algılandı! {backoff_count}. kez 2 dakika bekleniyor... [download_file] {url}")
@@ -186,8 +156,7 @@ def download_xlsx(index_url, folder_path, file_name, is_10k=False):
     while True:
         try:
             incr_request_and_sleep()
-            headers, proxies = random_headers_and_proxy()
-            resp = requests.get(index_url, headers=headers, proxies=proxies, timeout=30)
+            resp = requests.get(index_url, headers=HEADERS)
             if resp.status_code in [429, 403]:
                 backoff_count += 1
                 print(f"⏳ Rate-limit algılandı! {backoff_count}. kez 2 dakika bekleniyor... [download_xlsx] {index_url}")
@@ -608,9 +577,10 @@ def fill_dates_and_prices_in_ws(ws_dst):
         prev_date = this_date
 
 def create_final2_file_for_ticker(ticker):
+    """Final2 için tek bir ticker'ın dosyasını oluşturur."""
     final_folder = s3_path("Final")
     final2_folder = s3_path("Final2")
-    template_path = s3_path("Companies1/donusturucu.xlsx")
+    template_path = s3_path("Companies1/donusturucu.xlsx")  # Şablon tek script için burada
 
     src_key = s3_path(f"Final/{ticker}.xlsx")
     if not s3_exists(src_key):
@@ -632,6 +602,7 @@ def create_final2_file_for_ticker(ticker):
         wb_dst = openpyxl.load_workbook(BytesIO(template_bytes), data_only=False)
         ws_dst = wb_dst.active
 
+        # Tüm hücreleri kopyala (ilk 36 satır, BG'ye kadar)
         from openpyxl.utils import column_index_from_string
         max_col = column_index_from_string("BG")
         max_row = 36
@@ -648,24 +619,28 @@ def create_final2_file_for_ticker(ticker):
 
         yf_ticker = yf.Ticker(ticker)
 
+        # E41: Sector
         try:
             ws_dst["E41"].value = yf_ticker.info.get("sector", "")
         except Exception as e:
             print(f"{ticker} - sector alınamadı: {e}")
             ws_dst["E41"].value = ""
 
+        # F41: Industry
         try:
             ws_dst["F41"].value = yf_ticker.info.get("industry", "")
         except Exception as e:
             print(f"{ticker} - industry alınamadı: {e}")
             ws_dst["F41"].value = ""
 
+        # G41: Employees
         try:
             ws_dst["G41"].value = yf_ticker.info.get("fullTimeEmployees", "")
         except Exception as e:
             print(f"{ticker} - employees alınamadı: {e}")
             ws_dst["G41"].value = ""
 
+        # H41: Description/Summary
         try:
             summary = yf_ticker.info.get("longBusinessSummary", yf_ticker.info.get("summary", ""))
             ws_dst["H41"].value = summary
@@ -673,12 +648,14 @@ def create_final2_file_for_ticker(ticker):
             print(f"{ticker} - description alınamadı: {e}")
             ws_dst["H41"].value = ""
 
+        # E45: Beta
         try:
             ws_dst["E45"].value = yf_ticker.info.get("beta", "")
         except Exception as e:
             print(f"{ticker} - beta alınamadı: {e}")
             ws_dst["E45"].value = ""
 
+        # F45: US 10-Year Treasury Yield
         try:
             tnx_ticker = yf.Ticker("^TNX")
             tnx_yield = tnx_ticker.info.get("regularMarketPrice", "")
@@ -687,6 +664,7 @@ def create_final2_file_for_ticker(ticker):
             print(f"{ticker} - US 10Y yield alınamadı: {e}")
             ws_dst["F45"].value = ""
 
+        # I41: Earnings Date
         try:
             cal = yf_ticker.calendar
             earning_date = ""
@@ -700,6 +678,8 @@ def create_final2_file_for_ticker(ticker):
             print(f"{ticker} - earnings date alınamadı: {e}")
             ws_dst["I41"].value = ""
 
+        # Formül fonksiyonları (excel python donusum.txt) -- burada opsiyonel!
+        # Bu dosya yoksa bu satırı devre dışı bırakabilirsin:
         try:
             with open("excel python donusum.txt", "r", encoding="utf-8") as f:
                 formul_code = f.read()
@@ -709,6 +689,7 @@ def create_final2_file_for_ticker(ticker):
         except Exception as e:
             print(f"Formül fonksiyonu hatası: {e}")
 
+        # Final2 dosyasını tekrar s3'e yükle
         buffer = BytesIO()
         wb_dst.save(buffer)
         buffer.seek(0)
@@ -786,6 +767,7 @@ def upload_to_db(ticker):
         insert_data_to_db(cursor, ticker, data)
         conn.commit()
 
+        # --- GENEL FİRMASAL VERİLERİ EKLE ---
         wb = openpyxl.load_workbook(BytesIO(s3_read_bytes(fpath)), data_only=True)
         ws = wb.active
         sector = ws["B204"].value
@@ -826,8 +808,7 @@ def main():
         while True:
             try:
                 incr_request_and_sleep()
-                headers, proxies = random_headers_and_proxy()
-                r = requests.get(url, headers=headers, proxies=proxies, timeout=30)
+                r = requests.get(url, headers=HEADERS)
                 if r.status_code in [429, 403]:
                     backoff_count += 1
                     print(f"⏳ Rate-limit algılandı! {backoff_count}. kez 2 dakika bekleniyor... [main] {url}")
