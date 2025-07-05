@@ -52,7 +52,9 @@ def random_headers_and_proxy():
         "http": proxy,
         "https": proxy,
     }
+    print(f"LOG | Proxy: {proxy} | User-Agent: {email}")
     return headers, proxies
+
 
 # ----------- PARAMETRELER VE AYARLAR -----------
 DAYS = 100   # Buradaki günü değiştirerek aranan dosya gün filtresini ayarlayabilirsin (örn: 1, 3, 7)
@@ -542,6 +544,16 @@ def extract_metrics(file_path, symbol, year, quarter):
     df_to_save = df.reset_index().rename(columns={"index": "Metric"})
     s3_write_excel(df_to_save, out_path)
 
+    # RAM temizliği (extract_metrics)
+    del wb
+    del df_to_save
+    if 'df_existing' in locals():
+        del df_existing
+    if 'df' in locals():
+        del df
+    import gc; gc.collect()
+
+
 import yfinance as yf
 
 def fill_dates_and_prices_in_ws(ws_dst):
@@ -571,7 +583,10 @@ def fill_dates_and_prices_in_ws(ws_dst):
             hist = hist.reset_index()
             if 'Date' in hist:
                 hist['Date'] = hist['Date'].dt.date
+            del yf_ticker
+            import gc; gc.collect()
             return hist
+
         except Exception as e:
             print(f"{ticker_code} için fiyat verisi alınamadı: {e}")
             return None
@@ -606,6 +621,12 @@ def fill_dates_and_prices_in_ws(ws_dst):
         ws_dst[f"C{row}"] = price_index if price_index is not None else "Veri yok"
 
         prev_date = this_date
+
+    # RAM temizliği (fill_dates_and_prices_in_ws)
+    del hist_company
+    del hist_index
+    import gc; gc.collect()
+
 
 def create_final2_file_for_ticker(ticker):
     final_folder = s3_path("Final")
@@ -649,24 +670,28 @@ def create_final2_file_for_ticker(ticker):
         yf_ticker = yf.Ticker(ticker)
 
         try:
+            time.sleep(1)
             ws_dst["E41"].value = yf_ticker.info.get("sector", "")
         except Exception as e:
             print(f"{ticker} - sector alınamadı: {e}")
             ws_dst["E41"].value = ""
 
         try:
+            time.sleep(1)
             ws_dst["F41"].value = yf_ticker.info.get("industry", "")
         except Exception as e:
             print(f"{ticker} - industry alınamadı: {e}")
             ws_dst["F41"].value = ""
 
         try:
+            time.sleep(1)
             ws_dst["G41"].value = yf_ticker.info.get("fullTimeEmployees", "")
         except Exception as e:
             print(f"{ticker} - employees alınamadı: {e}")
             ws_dst["G41"].value = ""
 
         try:
+            time.sleep(1)
             summary = yf_ticker.info.get("longBusinessSummary", yf_ticker.info.get("summary", ""))
             ws_dst["H41"].value = summary
         except Exception as e:
@@ -674,20 +699,27 @@ def create_final2_file_for_ticker(ticker):
             ws_dst["H41"].value = ""
 
         try:
+            time.sleep(1)
             ws_dst["E45"].value = yf_ticker.info.get("beta", "")
         except Exception as e:
             print(f"{ticker} - beta alınamadı: {e}")
             ws_dst["E45"].value = ""
 
         try:
+            time.sleep(1)
             tnx_ticker = yf.Ticker("^TNX")
             tnx_yield = tnx_ticker.info.get("regularMarketPrice", "")
             ws_dst["F45"].value = tnx_yield
         except Exception as e:
             print(f"{ticker} - US 10Y yield alınamadı: {e}")
             ws_dst["F45"].value = ""
+        finally:
+            try: del tnx_ticker
+            except: pass
+            import gc; gc.collect()
 
         try:
+            time.sleep(1)
             cal = yf_ticker.calendar
             earning_date = ""
             if isinstance(cal, pd.DataFrame):
@@ -699,6 +731,9 @@ def create_final2_file_for_ticker(ticker):
         except Exception as e:
             print(f"{ticker} - earnings date alınamadı: {e}")
             ws_dst["I41"].value = ""
+        # RAM temizliği (yfinance ticker)
+        del yf_ticker
+        import gc; gc.collect()
 
         try:
             with open("excel python donusum.txt", "r", encoding="utf-8") as f:
@@ -714,9 +749,33 @@ def create_final2_file_for_ticker(ticker):
         buffer.seek(0)
         s3_write_bytes(dst_key, buffer.read())
         print(f"Final2 kaydedildi: {dst_key}")
+        # RAM temizliği (create_final2_file_for_ticker)
+        del wb_src
+        del ws_src
+        del wb_dst
+        del ws_dst
+        del buffer
+        del template_bytes
+        import gc; gc.collect()
+
 
     except Exception as e:
         print(f"Final2 oluşturulamadı: {e}")
+        # RAM temizliği (create_final2_file_for_ticker - except sonrası)
+        try: del wb_src
+        except: pass
+        try: del ws_src
+        except: pass
+        try: del wb_dst
+        except: pass
+        try: del ws_dst
+        except: pass
+        try: del buffer
+        except: pass
+        try: del template_bytes
+        except: pass
+        import gc; gc.collect()
+
 
 def get_data_from_excel(filepath, range_tuple):
     wb = openpyxl.load_workbook(BytesIO(s3_read_bytes(filepath)), data_only=True)
@@ -729,6 +788,11 @@ def get_data_from_excel(filepath, range_tuple):
         values = [cell.value for cell in row]
         data.append(values)
     return data
+    # RAM temizliği (get_data_from_excel)
+    del wb
+    del ws
+    import gc; gc.collect()
+
 
 def insert_company_info_to_db(cursor, ticker, sector, industry, employees, earnings_date, summary, radar=None, market_cap=None):
     sql = """
@@ -802,8 +866,18 @@ def upload_to_db(ticker):
 
         conn.commit()
         print(f"{ticker} yüklendi.")
+        # RAM temizliği (upload_to_db)
+        del wb
+        del ws
+        import gc; gc.collect()
+
     except Exception as e:
         print(f"{ticker} hata: {e}")
+        try: del wb
+        except: pass
+        try: del ws
+        except: pass
+        import gc; gc.collect()
     cursor.close()
     conn.close()
 
