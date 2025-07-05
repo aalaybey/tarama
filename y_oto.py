@@ -19,7 +19,7 @@ import random
 import psycopg2
 
 # ----------- PARAMETRELER VE AYARLAR -----------
-DAYS = 3   # Buradaki günü değiştirerek aranan dosya gün filtresini ayarlayabilirsin (örn: 1, 3, 7)
+DAYS = 90   # Buradaki günü değiştirerek aranan dosya gün filtresini ayarlayabilirsin (örn: 1, 3, 7)
 
 AWS_BUCKET = "alaybey"
 AWS_REGION = os.getenv("AWS_REGION")
