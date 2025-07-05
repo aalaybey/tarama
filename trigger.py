@@ -3,70 +3,63 @@ import time
 import boto3
 import runpy
 import sys
-from botocore.client import Config      # ← EKLE
+from botocore.client import Config
 
-# ── stdout’u satır satır anında Render’a gönder ──
 sys.stdout.reconfigure(line_buffering=True)
 
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS")   # Wasabi key’in
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET")
 AWS_REGION = os.getenv("AWS_REGION") or "eu-central-1"
-
-# Wasabi endpoint → aynı region’da “s3.<region>.wasabisys.com”
-ENDPOINT_URL = f"https://s3.{AWS_REGION}.wasabisys.com"   # ← EKLE
-
+ENDPOINT_URL = f"https://s3.{AWS_REGION}.wasabisys.com"
 S3_BUCKET = "alaybey"
-# S3_PREFIX = "s3/"   # ← KALDIRILDI, artık yok
-
-TRIGGER_KEY = "trigger.txt"    # prefix olmadan direkt bucket kökü
 
 s3 = boto3.client(
     "s3",
     aws_access_key_id=AWS_ACCESS_KEY_ID,
     aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
     region_name=AWS_REGION,
-    endpoint_url=ENDPOINT_URL,                  # ← EKLE
-    config=Config(signature_version="s3v4"),    # ← EKLE (Wasabi zorunlu)
+    endpoint_url=ENDPOINT_URL,
+    config=Config(signature_version="s3v4"),
 )
 
-
-def trigger_exists() -> bool:
+def get_trigger_keys():
     try:
-        s3.head_object(Bucket=S3_BUCKET, Key=TRIGGER_KEY)
-        return True
+        resp = s3.list_objects_v2(Bucket=S3_BUCKET)
+        keys = [obj['Key'] for obj in resp.get('Contents', []) if obj['Key'].startswith('trigger') and obj['Key'].endswith('.txt')]
+        return keys
     except Exception:
-        return False
+        return []
 
-
-def delete_trigger() -> None:
+def delete_trigger(key):
     try:
-        s3.delete_object(Bucket=S3_BUCKET, Key=TRIGGER_KEY)
+        s3.delete_object(Bucket=S3_BUCKET, Key=key)
     except Exception:
         pass
 
-
-def run_y_oto() -> None:
-    """y_oto.py’yi AYNI süreçte çalıştır, tüm print’ler direkt log’da görünür."""
+def run_y_oto():
     try:
         print(">>> y_oto.py başlatılıyor...")
-        # y_oto.py içindeki __main__ bloğu da çalışsın
         runpy.run_path("y_oto.py", run_name="__main__")
         print(">>> y_oto.py tamamlandı.")
     except Exception as e:
         print("y_oto.py çalıştırılamadı:", e)
 
-
-def main() -> None:
-    print("trigger.py aktif. S3’te trigger.txt bekleniyor…")
+def main():
+    print("trigger.py aktif. S3’te trigger*.txt bekleniyor…")
     is_running = False
     while True:
-        if not is_running and trigger_exists():
+        keys = get_trigger_keys()
+        if not is_running and keys:
             is_running = True
-            delete_trigger()
-            run_y_oto()
+            for key in keys:
+                print(f"Tetikleyici bulundu: {key}")
+                try:
+                    run_y_oto()
+                finally:
+                    delete_trigger(key)
+                    print(f"{key} silindi.")
             is_running = False
-        time.sleep(5)  # 5 saniyede bir kontrol
-
+        time.sleep(5)
 
 if __name__ == "__main__":
     main()

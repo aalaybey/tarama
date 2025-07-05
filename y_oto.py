@@ -1,291 +1,523 @@
-import subprocess
-import threading
-import time
-import random
-import requests
 import sys
 import os
+import json
+import requests
 import shutil
-import openpyxl
-from openpyxl.utils import column_index_from_string
-from threading import Lock
-import yfinance as yf
-import datetime
-import psycopg2
+from datetime import datetime, timedelta, UTC
+from bs4 import BeautifulSoup
 import pandas as pd
+import openpyxl
+import re
+import time
+import threading
 import boto3
 from io import BytesIO, StringIO
-from botocore.client import Config  # EKLENDİ
+from botocore.client import Config
 
-# --- S3 ayarları ---
+import subprocess
+import random
+import psycopg2
+
+# ----------- PARAMETRELER VE AYARLAR -----------
+DAYS = 3   # Buradaki günü değiştirerek aranan dosya gün filtresini ayarlayabilirsin (örn: 1, 3, 7)
+
+AWS_BUCKET = "alaybey"
+AWS_REGION = os.getenv("AWS_REGION")
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET")
-AWS_REGION = os.getenv("AWS_REGION")  # bölgen neyse
-S3_BUCKET = "alaybey"
-# S3_PREFIX = "s3/"  # KALDIRILDI
+ENDPOINT_URL = f"https://s3.{AWS_REGION}.wasabisys.com"
 
-ENDPOINT_URL = f"https://s3.{AWS_REGION}.wasabisys.com"  # EKLENDİ
+USER_AGENT = "Mozilla/5.0 (compatible; SEC/1.0; +https://www.sec.gov)"  # Kendi SEC-compliant agent
+HEADERS = {"User-Agent": USER_AGENT}
 
-s3_client = boto3.client(
+s3 = boto3.client(
     "s3",
+    region_name=AWS_REGION,
     aws_access_key_id=AWS_ACCESS_KEY_ID,
     aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-    region_name=AWS_REGION,
     endpoint_url=ENDPOINT_URL,
     config=Config(signature_version="s3v4"),
 )
 
-def s3_listdir(prefix):
-    paginator = s3_client.get_paginator('list_objects_v2')
-    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
-        for obj in page.get('Contents', []):
-            key = obj['Key']
-            if key != prefix and not key.endswith('/'):
-                yield key
-
-def s3_file_exists(key):
-    try:
-        s3_client.head_object(Bucket=S3_BUCKET, Key=key)
-        return True
-    except Exception:
-        return False
-
-def s3_download_bytes(key):
-    obj = s3_client.get_object(Bucket=S3_BUCKET, Key=key)
-    return obj['Body'].read()
-
-def s3_upload_bytes(key, data):
-    s3_client.put_object(Bucket=S3_BUCKET, Key=key, Body=data)
-
-def s3_download_str(key):
-    return s3_download_bytes(key).decode("utf-8")
-
-def s3_upload_str(key, data):
-    s3_upload_bytes(key, data.encode("utf-8"))
-
-def s3_download_xlsx(key):
-    data = s3_download_bytes(key)
-    return openpyxl.load_workbook(BytesIO(data), data_only=True)
-
-def s3_upload_xlsx(key, workbook):
-    buffer = BytesIO()
-    workbook.save(buffer)
-    buffer.seek(0)
-    s3_upload_bytes(key, buffer.read())
-
-def s3_copy(src_key, dst_key):
-    s3_client.copy_object(Bucket=S3_BUCKET, CopySource={'Bucket': S3_BUCKET, 'Key': src_key}, Key=dst_key)
-
-def s3_isdir(prefix):
-    response = s3_client.list_objects_v2(Bucket=S3_BUCKET, Prefix=prefix, Delimiter='/')
-    return 'CommonPrefixes' in response or 'Contents' in response
-
-# --- Dosya yolu yardımcıları ---
-def s3_path(local_path):
-    # prefix kaldırıldı, sadece / düzeltmesi
-    rel_path = local_path.replace("\\", "/").replace("./", "")
+def s3_path(key):  # Her path için kullan
+    rel_path = key.replace("\\", "/").replace("./", "")
     return rel_path.lstrip("/")
 
-FINAL2_DIR = s3_path("Final2")
-EXCEL_RANGE = ('A191', 'O202')
-
-# --- Formül fonksiyonlarını yükle
-formul_path = s3_path("excel python donusum.txt")
-formul_ns = {}
-formul_code = s3_download_str(formul_path)
-exec(formul_code, formul_ns)
-
-PROXY_FILE = s3_path("sec_calısan_proxyler.txt")
-EMAILS_FILE = s3_path("emailler.txt")
-
-def insert_company_info_to_db(cursor, ticker, sector, industry, employees, earnings_date, summary, radar=None, market_cap=None):
-    sql = """
-        INSERT INTO company_info (ticker, sector, industry, employees, earnings_date, summary, radar, market_cap)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (ticker) DO UPDATE
-        SET sector=EXCLUDED.sector,
-            industry=EXCLUDED.industry,
-            employees=EXCLUDED.employees,
-            earnings_date=EXCLUDED.earnings_date,
-            summary=EXCLUDED.summary,
-            radar=EXCLUDED.radar,
-            market_cap=EXCLUDED.market_cap
-    """
-    cursor.execute(sql, (ticker, sector, industry, employees, earnings_date, summary, radar, market_cap))
-
-def get_final_xlsx_times(final_folder=s3_path("Final")):
-    """Final klasöründeki tüm .xlsx dosyalarının {TICKER:mtime} şeklinde dict’ini döner."""
-    xlsx_times = {}
-    for key in s3_listdir(final_folder):
-        if key.lower().endswith(".xlsx"):
-            try:
-                stat = s3_client.head_object(Bucket=S3_BUCKET, Key=key)
-                ticker = os.path.splitext(os.path.basename(key))[0].upper()
-                xlsx_times[ticker] = stat['LastModified'].timestamp()
-            except Exception:
-                pass
-    return xlsx_times
-
-def load_proxies_from_file(proxy_file):
-    text = s3_download_str(proxy_file)
-    proxies = [line.strip() for line in text.splitlines() if line.strip()]
-    return proxies
-
-def load_emails_from_file(emails_file):
-    code = s3_download_str(emails_file)
-    ns = {}
-    exec(code, ns)
-    if "EMAILS" in ns:
-        return ns["EMAILS"]
-    raise Exception("EMAILS listesi emailler.txt'de bulunamadı!")
-
-PROXIES = load_proxies_from_file(PROXY_FILE)
-EMAILS = load_emails_from_file(EMAILS_FILE)
-
-SCRIPTS = [
-    "a1.py",
-    "a2.py",
-]
-
-# ---- YENİ: Proxy kullanımını takip eden set ve lock
-proxies_in_use: set[str] = set()
-proxy_lock = Lock()
-
-def test_proxy(proxy_url: str) -> bool:
-    proxies = {
-        "http": proxy_url,
-        "https": proxy_url
-    }
+def s3_exists(key):
     try:
-        r = requests.get("http://httpbin.org/ip", proxies=proxies, timeout=15)
-        if r.status_code == 200:
-            return True
-    except Exception:
-        pass
-    return False
+        s3.head_object(Bucket=AWS_BUCKET, Key=s3_path(key))
+        return True
+    except:
+        return False
 
-def get_working_proxy(proxy_pool, blacklist, proxies_in_use, proxy_lock):
-    tries = 0
-    while tries < len(proxy_pool):
-        candidate = None
-        with proxy_lock:
-            available = [p for p in proxy_pool if p not in blacklist and p not in proxies_in_use]
-            if available:
-                candidate = random.choice(available)
-                proxies_in_use.add(candidate)
-        if not candidate:
-            time.sleep(2)
-            tries += 1
+def s3_read_text(key):
+    obj = s3.get_object(Bucket=AWS_BUCKET, Key=s3_path(key))
+    return obj["Body"].read().decode("utf-8")
+
+def s3_read_bytes(key):
+    obj = s3.get_object(Bucket=AWS_BUCKET, Key=s3_path(key))
+    return obj["Body"].read()
+
+def s3_write_text(key, text):
+    s3.put_object(Bucket=AWS_BUCKET, Key=s3_path(key), Body=text.encode("utf-8"))
+
+def s3_write_bytes(key, b):
+    s3.put_object(Bucket=AWS_BUCKET, Key=s3_path(key), Body=b)
+
+def s3_delete(key):
+    s3.delete_object(Bucket=AWS_BUCKET, Key=s3_path(key))
+
+def s3_list_dir(prefix):
+    paginator = s3.get_paginator("list_objects_v2")
+    result = paginator.paginate(Bucket=AWS_BUCKET, Prefix=s3_path(prefix))
+    return [content['Key'] for page in result for content in page.get('Contents', [])]
+
+# ----------- Tetikleyici dosyasından ticker çekme -----------
+def get_trigger_ticker():
+    """Wasabi bucket'ında trigger*.txt dosyasını bulur, ticker'ı döndürür."""
+    resp = s3.list_objects_v2(Bucket=AWS_BUCKET)
+    trigger_key = None
+    ticker = None
+    for obj in resp.get('Contents', []):
+        key = obj['Key']
+        if key.startswith('trigger') and key.endswith('.txt') and len(key) > 10:
+            trigger_key = key
+            ticker = key[len('trigger'):-len('.txt')]
+            break
+    if not trigger_key or not ticker:
+        raise Exception("trigger*.txt bulunamadı!")
+    return ticker.upper(), trigger_key
+
+# ----------- tickers.txt'den cik numarası bulma -----------
+def get_cik_for_ticker(ticker, tickers_file="tickers.txt"):
+    """Aynı klasördeki tickers.txt'den (ör: AAPL,1234567890) ticker'a karşılık gelen cik'i bulur"""
+    with open(tickers_file, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or ',' not in line:
+                continue
+            t, cik = line.split(",", 1)
+            if t.strip().upper() == ticker.upper():
+                return cik.strip().zfill(10)
+    raise Exception(f"{ticker} için cik bulunamadı (tickers.txt'de yok)")
+
+# ----------- a1.py'den gelen diğer yardımcılar -----------
+def incr_request_and_sleep():
+    # Proxy yok, throttle sadece log
+    incr_request_and_sleep.counter += 1
+    if incr_request_and_sleep.counter % 10 == 0:
+        print(f"🕒 {incr_request_and_sleep.counter} request atıldı, 0.5 sn bekleniyor...")
+        time.sleep(0.5)
+incr_request_and_sleep.counter = 0
+
+def inc_error_and_kill_if_limit(limit=50):
+    inc_error_and_kill_if_limit.counter += 1
+    if inc_error_and_kill_if_limit.counter >= limit:
+        print("LOG: Script kill oldu! (üst üste hata limiti aşıldı)")
+        print(f"❌ ÜST ÜSTE {limit} HATA! Script kill ediliyor.")
+        sys.exit(1)
+inc_error_and_kill_if_limit.counter = 0
+
+def download_file(url, s3key):
+    backoff_count = 0
+    while True:
+        try:
+            incr_request_and_sleep()
+            resp = requests.get(url, headers=HEADERS)
+            if resp.status_code in [429, 403]:
+                backoff_count += 1
+                print(f"⏳ Rate-limit algılandı! {backoff_count}. kez 2 dakika bekleniyor... [download_file] {url}")
+                if backoff_count >= 3:
+                    print("❌ 3 kez üst üste backoff, script kill ediliyor!")
+                    sys.exit(1)
+                time.sleep(120)
+                continue
+            if resp.status_code >= 400:
+                print(f"📥 Dosya indirme hatası: {url} => {resp.status_code} {resp.reason}")
+                break
+            s3_write_bytes(s3key, resp.content)
+            break
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+            backoff_count += 1
+            print(f"🌐 Bağlantı hatası: {url}")
+            if backoff_count >= 3:
+                print("❌ 3 kez üst üste backoff, script kill ediliyor!")
+                sys.exit(1)
+            time.sleep(120)
             continue
-        if test_proxy(candidate):
-            return candidate
+        except Exception as e:
+            print(f"📥 Dosya indirme hatası: {url} => {e}")
+            inc_error_and_kill_if_limit()
+            break
+
+def s3_load_workbook(key):
+    b = s3_read_bytes(key)
+    return openpyxl.load_workbook(BytesIO(b), data_only=True)
+
+def download_xlsx(index_url, folder_path, file_name, is_10k=False):
+    print(f"🔎 XLSX aranıyor: {file_name} [{index_url}]")
+    backoff_count = 0
+    while True:
+        try:
+            incr_request_and_sleep()
+            resp = requests.get(index_url, headers=HEADERS)
+            if resp.status_code in [429, 403]:
+                backoff_count += 1
+                print(f"⏳ Rate-limit algılandı! {backoff_count}. kez 2 dakika bekleniyor... [download_xlsx] {index_url}")
+                if backoff_count >= 3:
+                    print("❌ 3 kez üst üste backoff, script kill ediliyor!")
+                    sys.exit(1)
+                time.sleep(120)
+                continue
+            if resp.status_code >= 400:
+                print(f"❌ Index sayfası hatası: {index_url} => {resp.status_code} {resp.reason}")
+                return None, None, None, None
+            break
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+            backoff_count += 1
+            print(f"🌐 Bağlantı hatası: {index_url}")
+            if backoff_count >= 3:
+                print("❌ 3 kez üst üste backoff, script kill ediliyor!")
+                sys.exit(1)
+            time.sleep(120)
+            continue
+        except Exception as e:
+            print(f"❌ Index sayfası alınamadı: {e}")
+            inc_error_and_kill_if_limit()
+            return None, None, None, None
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    xlsx_url = None
+    for link in soup.find_all("a"):
+        href = link.get("href", "")
+        if href.lower().endswith(".xlsx"):
+            if href.startswith("/"):
+                xlsx_url = "https://www.sec.gov" + href
+            else:
+                base = index_url.rsplit("/", 1)[0]
+                xlsx_url = base + "/" + href
+            break
+
+    if not xlsx_url:
+        return None, None, None, None
+
+    temp_path = f"{folder_path}/temp.xlsx"
+    if s3_exists(temp_path):
+        try:
+            s3_delete(temp_path)
+            print(f"ℹ️ Eski temp.xlsx dosyası silindi: {temp_path}")
+        except Exception as e:
+            print(f"⚠️ Eski temp dosyası silinemedi: {e}")
+
+    download_file(xlsx_url, temp_path)
+
+    if not s3_exists(temp_path):
+        print(f"⚠️ Dosya temp.xlsx oluşturulamadı: {temp_path}")
+        inc_error_and_kill_if_limit()
+        return None, None, None, None
+
+    try:
+        b = s3_read_bytes(temp_path)
+        wb = openpyxl.load_workbook(BytesIO(b), data_only=True)
+        year, quarter = None, None
+        for sheet in wb.worksheets:
+            for row in sheet.iter_rows():
+                for cell in row:
+                    if isinstance(cell.value, str) and "Document Fiscal Year Focus" in cell.value:
+                        idx = row.index(cell)
+                        if idx + 1 < len(row):
+                            year_cell = row[idx + 1]
+                            if year_cell.value is not None:
+                                year = str(year_cell.value).strip()
+            if is_10k:
+                quarter = "Q4"
+        if not is_10k:
+            for sheet in wb.worksheets:
+                for row in sheet.iter_rows():
+                    for cell in row:
+                        if isinstance(cell.value, str) and "Document Fiscal Period Focus" in cell.value:
+                            idx = row.index(cell)
+                            if idx + 1 < len(row):
+                                qval = row[idx + 1].value
+                                if qval is not None:
+                                    qval = str(qval).strip().upper()
+                                    if qval.startswith("Q"):
+                                        quarter = qval
+                                    else:
+                                        quarter = "Q" + qval
+        base_ticker = file_name.split("-")[0]
+        if not year or not quarter:
+            parts = file_name.split("-")
+            if len(parts) >= 3:
+                year = parts[1]
+                quarter = parts[2]
+        symbol = base_ticker
+        new_base = f"{symbol}-{year}-{quarter}"
+        final_name = new_base + ".xlsx"
+        final_path = f"{folder_path}/{final_name}"
+
+        if s3_exists(final_path):
+            print(f"ℹ️ Zaten var, atlandı: {final_path}")
+            s3_delete(temp_path)
         else:
-            with proxy_lock:
-                blacklist.add(candidate)
-                proxies_in_use.discard(candidate)
-            print(f"[!] Proxy çalışmıyor: {candidate}")
-            time.sleep(3)
-            tries += 1
+            b = s3_read_bytes(temp_path)
+            s3_write_bytes(final_path, b)
+            s3_delete(temp_path)
+            print(f"✅ Kaydedildi: {final_path}")
+
+        return final_path, symbol, year, quarter
+
+    except Exception as e:
+        print(f"⚠️ XLSX işleme hatası: {e}")
+        fallback = f"{folder_path}/{file_name}.xlsx"
+        b = s3_read_bytes(temp_path)
+        s3_write_bytes(fallback, b)
+        s3_delete(temp_path)
+        print(f"⚠️ Geçici adla kaydedildi: {fallback}")
+        inc_error_and_kill_if_limit()
+        parts = file_name.split("-")
+        if len(parts) >= 3:
+            symbol = parts[0]
+            year = parts[1]
+            quarter = parts[2]
+            return fallback, symbol, year, quarter
+        return fallback, None, None, None
+
+def get_sheet_title(sheet):
+    try:
+        top_left = sheet["A1"].value
+        if isinstance(top_left, str):
+            return top_left.strip().lower()
+        else:
+            return ""
+    except:
+        return ""
+
+def detect_multiplier_from_title(title):
+    if not title:
+        return 1.0
+    words = title.split()
+    if not words:
+        return 1.0
+    last = re.sub(r"[^\w]", "", words[-1]).lower()
+    if last == "millions":
+        return 1_000_000.0
+    elif last == "thousands":
+        return 1_000.0
+    else:
+        return 1.0
+
+def find_metric_value(sheet, keyword_groups, multiplier=1.0, exclude_term=None, reverse=False, quarter=None, row_start=None):
+    rows = list(sheet.iter_rows())
+    if reverse:
+        rows = rows[::-1]
+    if row_start is not None:
+        rows = rows[row_start:]
+    col_idx = None
+    if quarter is not None:
+        quarter_map = {"Q1": "3 month", "Q2": "6 month", "Q3": "9 month", "Q4": "12 month"}
+        target_phrase = quarter_map.get(quarter.upper())
+        if target_phrase:
+            for i in range(min(2, len(rows))):
+                for j, cell in enumerate(rows[i]):
+                    if cell.value and target_phrase.lower() in str(cell.value).lower():
+                        col_idx = j
+                        break
+                if col_idx is not None:
+                    break
+    for group in keyword_groups:
+        for row in rows:
+            row_text = " ".join(str(c.value).lower() for c in row if c.value is not None)
+            if exclude_term and exclude_term.lower() in row_text:
+                continue
+            if all(k.lower() in row_text for k in group):
+                label_idx = None
+                for idx, c in enumerate(row):
+                    if isinstance(c.value, str):
+                        cell_text = c.value.lower()
+                        if all(k.lower() in cell_text for k in group):
+                            label_idx = idx
+                            break
+                if label_idx is not None:
+                    if col_idx is not None:
+                        c = row[col_idx]
+                        if isinstance(c.value, (int, float)):
+                            return c.value * multiplier
+                    for c in row[label_idx + 1:]:
+                        if isinstance(c.value, (int, float)):
+                            return c.value * multiplier
+                    for c in row:
+                        if isinstance(c.value, (int, float)):
+                            return c.value * multiplier
     return None
 
-def release_proxy(proxy, proxies_in_use, proxy_lock):
-    with proxy_lock:
-        proxies_in_use.discard(proxy)
+def s3_write_excel(df, key):
+    out = BytesIO()
+    df.to_excel(out, index=False)
+    out.seek(0)
+    s3_write_bytes(key, out.read())
 
-def run_script_with_proxy(script, proxy_url, script_id, user_agent, proxies_in_use, proxy_lock, timeout_seconds: int = 180):
-    print(f"[{script}] başlatılıyor: {proxy_url} (user_agent: {user_agent})")
-    process = subprocess.Popen(
-        ["python", script, "--proxy", proxy_url, f"--script_id={script_id}", f"--user_agent={user_agent}"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        bufsize=1
-    )
-    log_fname = f"log_{script.replace('.py','')}.txt"
-    last_output_time = time.time()
+def extract_metrics(file_path, symbol, year, quarter):
+    print(f"📊 Veriler çıkarılıyor: {symbol} - {year} {quarter}")
 
-    def reader(pipe, tag):
-        nonlocal last_output_time
-        log_s3key = s3_path(log_fname)
-        old_content = ""
-        try:
-            old_content = s3_download_str(log_s3key)
-        except Exception:
-            pass
-        buffer = old_content
-        for line in iter(pipe.readline, ''):
-            if not line:
-                break
-            buffer += f"[{tag}] {line}"
-            last_output_time = time.time()
-        s3_upload_str(log_s3key, buffer)
-        pipe.close()
-
-    t_out = threading.Thread(target=reader, args=(process.stdout, "STDOUT"))
-    t_err = threading.Thread(target=reader, args=(process.stderr, "STDERR"))
-    t_out.start()
-    t_err.start()
-
-    success = False
-    kill_reason = None
-    while process.poll() is None:
-        if time.time() - last_output_time > timeout_seconds:
-            print(f"[{script}] {timeout_seconds} sn çıktı gelmedi, process öldürülüyor ve yeni proxy deneniyor.")
-            process.kill()
-            kill_reason = f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} ---\nProcess kill: uzun süre çıktı yok.\n"
-            break
-        time.sleep(1)
-
-    t_out.join()
-    t_err.join()
-
-    if process.returncode == 0:
-        success = True
-
-    log_s3key = s3_path(log_fname)
-    old_content = ""
     try:
-        old_content = s3_download_str(log_s3key)
-    except Exception:
-        pass
-    if kill_reason:
-        old_content += kill_reason
-        s3_upload_str(log_s3key, old_content)
+        wb = s3_load_workbook(file_path)
+    except Exception as e:
+        print(f"⚠️ Excel açılamadı: {file_path} => {e}")
+        inc_error_and_kill_if_limit()
+        return
 
-    release_proxy(proxy_url, proxies_in_use, proxy_lock)
+    cash_flow_metrics = {
+        "Depreciation and Amortization": [["depreciation", "amortization"]],
+        "Amortization": [["amortization"]],
+        "Depreciation": [["depreciation"]],
+        "Cash From Operations": [["cash", "operat"]],
+        "PPE Purchase": [["property", "equipment", "purchas"], ["property", "equipment", "add"], ["property", "equipment", "payment"], ["property", "equipment", "acqui"], ["property", "add"], ["property", "purchas"], ["property", "acqui"]],
+        "PPE Sale": [["sale", "property"], ["sale", "fixed"], ["disposal", "property"], ["disposal", "fixed"], ["sale", "tangible"], ["disposal", "tangible"]],
+        "Cash Business Acquisitions": [["business"]],
+        "Dividends": [["payment", "dividend"]],
+        "Cash Taxes": [["paid", "tax"], ["cash", "tax"], ["tax"]],
+        "Cash Interest": [["paid", "interest"], ["cash", "interest"], ["interest"]],
+    }
 
-    if success:
-        print(f"[{script}] SORUNSUZ tamamlandı ({proxy_url})")
-    else:
-        print(f"[{script}] HATA ile bitti! ({proxy_url})")
+    income_metrics = {
+        "Sales": [["revenue"], ["sale"]],
+        "Cost of Sales": [["cost of"]],
+        "Gross Profit": [["gross"], ["margin"], ["gross", "profit"]],
+        "EBIT": [["operating", "income"], ["operating", "loss"], ["income", "operations"], ["loss", "operations"]],
+        "Net Income": [["net income"], ["net loss"], ["net", "income"], ["net", "loss"]],
+        "Interest Income": [["interest", "income"], ["other", "net"]],
+        "Interest Expense": [["interest", "expense"]],
+        "EPS": [["basic", "net", "income"], ["basic", "net", "loss"], ["basic", "dollar"], ["basic", "usd"]],
+        "Shares Outstanding": [["basic"]],
+    }
 
-    return success
+    balance_metrics = {
+        "Total Assets": [["total assets"]],
+        "Total Equity": [["total", "equity"]],
+        "Noncontrolling interest": [["non", "control", "interest"]],
+        "Cash and cash equivalents": [["cash", "equivalents"]],
+        "Inventories": [["inventor"]],
+        "Accounts receivable": [["accounts", "receivable"]],
+        "Prepaid expenses": [["prepaid", "expenses"]],
+        "PPE": [["property", "equipment"]],
+        "Intangible assets": [["intangible", "asset"]],
+        "Operating lease assets": [["leas", "operati", "asset"]],
+        "Digital assets": [["digital", "asset"]],
+        "Right-of-use assets": [["use", "asset"]],
+        "Accounts payable": [["account", "payable"]],
+        "Operating lease liabilities": [["leas", "operati", "liab"]],
+        "Accrued liabilities": [["accrue", "liabilit"], ["accrue", "expense"]],
+        "Deferred revenue": [["defer", "revenue"], ["unearn", "revenue"]],
+    }
 
-def script_launcher_loop(script, script_id, user_agent, proxy_pool, proxy_blacklist, proxies_in_use, proxy_lock):
-    max_attempts = 100
-    attempts = 0
-    while attempts < max_attempts:
-        proxy_url = get_working_proxy(proxy_pool, proxy_blacklist, proxies_in_use, proxy_lock)
-        if not proxy_url:
-            print(f"[{script}] için uygun proxy bulunamadı.")
-            return
-        time.sleep(3 + random.uniform(0, 2))
-        success = run_script_with_proxy(script, proxy_url, script_id, user_agent, proxies_in_use, proxy_lock)
-        if success:
+    extracted = {}
+
+    cash_flow_sheet = None
+    cash_flow_multiplier = 1.0
+    for sheet in wb.worksheets:
+        title = get_sheet_title(sheet)
+        if "cash flow" in title:
+            cash_flow_sheet = sheet
+            cash_flow_multiplier = detect_multiplier_from_title(title)
             break
-        else:
-            print(f"[{script}] Proxy HATALI: {proxy_url}. Yeni proxy deneniyor.")
-            attempts += 1
-            time.sleep(4 + random.uniform(0, 2))
-    if attempts >= max_attempts:
-        print(f"[{script}] için uygun çalışan proxy bulunamadı, işlemi sonlandırıyor.")
+
+    if cash_flow_sheet is not None:
+        for metric, kw_groups in cash_flow_metrics.items():
+            val = find_metric_value(
+                cash_flow_sheet, kw_groups, multiplier=cash_flow_multiplier, exclude_term=None, reverse=False, quarter=quarter
+            )
+            extracted[metric] = val if val is not None else 0.0
+    else:
+        for metric in cash_flow_metrics.keys():
+            extracted[metric] = 0.0
+
+    income_sheet = None
+    income_general_multiplier = 1.0
+    income_share_multiplier = None
+
+    for sheet in wb.worksheets:
+        title = get_sheet_title(sheet)
+        if "statements of operations" in title:
+            income_sheet = sheet
+            income_general_multiplier = detect_multiplier_from_title(title)
+            low = title.lower()
+            if "shares in millions" in low:
+                income_share_multiplier = 1_000_000.0
+            elif "shares in thousands" in low:
+                income_share_multiplier = 1_000.0
+            else:
+                income_share_multiplier = 1.0
+            break
+
+    if income_sheet is None:
+        for sheet in wb.worksheets:
+            title = get_sheet_title(sheet)
+            if "income" in title and "statement" in title:
+                income_sheet = sheet
+                income_general_multiplier = detect_multiplier_from_title(title)
+                low = title.lower()
+                if "shares in millions" in low:
+                    income_share_multiplier = 1_000_000.0
+                elif "shares in thousands" in low:
+                    income_share_multiplier = 1_000.0
+                else:
+                    income_share_multiplier = 1.0
+                break
+
+    if income_sheet is not None:
+        for metric, kw_groups in income_metrics.items():
+            if metric == "Shares Outstanding":
+                multiplier = income_share_multiplier or 1.0
+                value = find_metric_value(income_sheet, kw_groups, multiplier=multiplier, exclude_term=None, reverse=True, quarter=quarter)
+            else:
+                value = find_metric_value(income_sheet, kw_groups, multiplier=income_general_multiplier, exclude_term=None, reverse=False, quarter=quarter)
+            extracted[metric] = value if value is not None else 0.0
+    else:
+        for metric in income_metrics.keys():
+            extracted[metric] = 0.0
+
+    balance_sheet = None
+    balance_multiplier = 1.0
+
+    for sheet in wb.worksheets:
+        title = get_sheet_title(sheet)
+        if "balance sheet" in title and "parenthetical" not in title:
+            balance_sheet = sheet
+            balance_multiplier = detect_multiplier_from_title(title)
+            break
+
+    if balance_sheet is not None:
+        for metric, kw_groups in balance_metrics.items():
+            value = find_metric_value(balance_sheet, kw_groups, multiplier=balance_multiplier, exclude_term=None, reverse=False, quarter=quarter)
+            extracted[metric] = value if value is not None else 0.0
+    else:
+        for metric in balance_metrics.keys():
+            extracted[metric] = 0.0
+
+    s3_out_dir = "Final"
+    out_path = f"{s3_out_dir}/{symbol}.xlsx"
+
+    all_metrics = list(cash_flow_metrics.keys()) + list(income_metrics.keys()) + list(balance_metrics.keys())
+
+    if s3_exists(out_path):
+        df_existing = pd.read_excel(BytesIO(s3_read_bytes(out_path)))
+        if "Metric" not in df_existing.columns:
+            df_existing.insert(0, "Metric", all_metrics)
+        df = df_existing.set_index("Metric")
+    else:
+        df = pd.DataFrame(index=all_metrics)
+
+    col_name = f"{year} {quarter}"
+    col_values = [extracted.get(m, 0.0) for m in all_metrics]
+    df[col_name] = col_values
+
+    df_to_save = df.reset_index().rename(columns={"index": "Metric"})
+    s3_write_excel(df_to_save, out_path)
+
+import yfinance as yf
 
 def fill_dates_and_prices_in_ws(ws_dst):
-    import yfinance as yf
-    import datetime
-
     ticker = ws_dst["B40"].value
     index_ticker = ws_dst["C40"].value
 
@@ -302,13 +534,13 @@ def fill_dates_and_prices_in_ws(ws_dst):
 
     start_row = 41
     end_row = 107
-    curr_date = datetime.date.today()
-    min_date = curr_date - datetime.timedelta(days=(end_row - start_row) * 30 + 30)
+    curr_date = datetime.today().date()
+    min_date = curr_date - timedelta(days=(end_row - start_row) * 30 + 30)
 
     def get_hist(ticker_code):
         try:
             yf_ticker = yf.Ticker(ticker_code)
-            hist = yf_ticker.history(start=min_date.strftime("%Y-%m-%d"), end=(curr_date + datetime.timedelta(days=1)).strftime("%Y-%m-%d"))
+            hist = yf_ticker.history(start=min_date.strftime("%Y-%m-%d"), end=(curr_date + timedelta(days=1)).strftime("%Y-%m-%d"))
             hist = hist.reset_index()
             if 'Date' in hist:
                 hist['Date'] = hist['Date'].dt.date
@@ -325,7 +557,7 @@ def fill_dates_and_prices_in_ws(ws_dst):
         if i == 0:
             this_date = curr_date
         else:
-            this_date = prev_date - datetime.timedelta(days=30)
+            this_date = prev_date - timedelta(days=30)
 
         def find_price(hist, date):
             search_date = date
@@ -336,7 +568,7 @@ def fill_dates_and_prices_in_ws(ws_dst):
                     if not row_df.empty and not row_df['Close'].isnull().all():
                         close_price = float(row_df['Close'].iloc[0])
                         break
-                search_date -= datetime.timedelta(days=1)
+                search_date -= timedelta(days=1)
             return close_price
 
         price_company = find_price(hist_company, this_date)
@@ -348,144 +580,131 @@ def fill_dates_and_prices_in_ws(ws_dst):
 
         prev_date = this_date
 
-# ---------------------------------------------------------------------------
-#  GÜNCELLENEN FONKSİYON: Final2 dosyalarını formülleri bozmadan oluşturur
-# ---------------------------------------------------------------------------
-
-def create_final2_files(filtered_tickers=None):
-    """
-    filtered_tickers: None ise tüm şirketler. Liste ise sadece o şirketler için.
-    """
+def create_final2_file_for_ticker(ticker):
+    """Final2 için tek bir ticker'ın dosyasını oluşturur."""
     final_folder = s3_path("Final")
-    if not s3_isdir(final_folder):
-        print("[create_final2] 'Final' klasörü bulunamadı, atlanıyor.")
+    final2_folder = s3_path("Final2")
+    template_path = s3_path("Companies1/donusturucu.xlsx")  # Şablon tek script için burada
+
+    src_key = s3_path(f"Final/{ticker}.xlsx")
+    if not s3_exists(src_key):
+        print(f"{ticker} için Final dosyası yok.")
         return
 
-    final2_folder = s3_path("Final2")
-    # S3'te create etmene gerek yok, yükleyince oluşur
+    if not s3_exists(template_path):
+        print(f"Şablon bulunamadı: {template_path}")
+        return
 
-    max_col = column_index_from_string("BG")  # 59
-    max_row = 36
+    try:
+        wb_src = openpyxl.load_workbook(BytesIO(s3_read_bytes(src_key)), data_only=True)
+        ws_src = wb_src.active
 
-    for script_idx, script in enumerate(SCRIPTS, start=1):
-        companies_txt = s3_path(f"a{script_idx}.txt")
-        template_path = s3_path(f"Companies{script_idx}/donusturucu.xlsx")
+        dst_key = s3_path(f"Final2/{ticker}.xlsx")
+        template_bytes = s3_read_bytes(template_path)
+        s3_write_bytes(dst_key, template_bytes)
 
-        if not s3_file_exists(companies_txt):
-            continue
-        if not s3_file_exists(template_path):
-            print(f"[create_final2] Şablon bulunamadı: {template_path}")
-            continue
+        wb_dst = openpyxl.load_workbook(BytesIO(template_bytes), data_only=False)
+        ws_dst = wb_dst.active
 
-        # Ticker listesi oku
-        text = s3_download_str(companies_txt)
-        tickers = [line.split(",")[0].strip().upper() for line in text.splitlines() if "," in line]
+        # Tüm hücreleri kopyala (ilk 36 satır, BG'ye kadar)
+        from openpyxl.utils import column_index_from_string
+        max_col = column_index_from_string("BG")
+        max_row = 36
+        for r in range(1, max_row + 1):
+            for c in range(1, max_col + 1):
+                src_val = ws_src.cell(row=r, column=c).value
+                if src_val is not None:
+                    ws_dst.cell(row=r, column=c).value = src_val
 
-        if filtered_tickers is not None:
-            tickers = [t for t in tickers if t in filtered_tickers]
+        ws_dst["B40"].value = ticker
+        ws_dst["C40"].value = "^GSPC"
 
-        for ticker in tickers:
-            src_key = s3_path(f"Final/{ticker}.xlsx")
-            if not s3_file_exists(src_key):
-                continue
+        fill_dates_and_prices_in_ws(ws_dst)
 
-            try:
-                wb_src = openpyxl.load_workbook(BytesIO(s3_download_bytes(src_key)), data_only=True)
-                ws_src = wb_src.active
+        yf_ticker = yf.Ticker(ticker)
 
-                dst_key = s3_path(f"Final2/{ticker}.xlsx")
-                # S3 template'ı indirip kopyala
-                template_bytes = s3_download_bytes(template_path)
-                s3_upload_bytes(dst_key, template_bytes)
+        # E41: Sector
+        try:
+            ws_dst["E41"].value = yf_ticker.info.get("sector", "")
+        except Exception as e:
+            print(f"{ticker} - sector alınamadı: {e}")
+            ws_dst["E41"].value = ""
 
-                wb_dst = openpyxl.load_workbook(BytesIO(template_bytes), data_only=False)
-                ws_dst = wb_dst.active
+        # F41: Industry
+        try:
+            ws_dst["F41"].value = yf_ticker.info.get("industry", "")
+        except Exception as e:
+            print(f"{ticker} - industry alınamadı: {e}")
+            ws_dst["F41"].value = ""
 
-                for r in range(1, max_row + 1):
-                    for c in range(1, max_col + 1):
-                        src_val = ws_src.cell(row=r, column=c).value
-                        if src_val is not None:
-                            ws_dst.cell(row=r, column=c).value = src_val
+        # G41: Employees
+        try:
+            ws_dst["G41"].value = yf_ticker.info.get("fullTimeEmployees", "")
+        except Exception as e:
+            print(f"{ticker} - employees alınamadı: {e}")
+            ws_dst["G41"].value = ""
 
-                ws_dst["B40"].value = ticker
-                ws_dst["C40"].value = "^GSPC"
+        # H41: Description/Summary
+        try:
+            summary = yf_ticker.info.get("longBusinessSummary", yf_ticker.info.get("summary", ""))
+            ws_dst["H41"].value = summary
+        except Exception as e:
+            print(f"{ticker} - description alınamadı: {e}")
+            ws_dst["H41"].value = ""
 
-                fill_dates_and_prices_in_ws(ws_dst)
+        # E45: Beta
+        try:
+            ws_dst["E45"].value = yf_ticker.info.get("beta", "")
+        except Exception as e:
+            print(f"{ticker} - beta alınamadı: {e}")
+            ws_dst["E45"].value = ""
 
-                yf_ticker = yf.Ticker(ticker)
+        # F45: US 10-Year Treasury Yield
+        try:
+            tnx_ticker = yf.Ticker("^TNX")
+            tnx_yield = tnx_ticker.info.get("regularMarketPrice", "")
+            ws_dst["F45"].value = tnx_yield
+        except Exception as e:
+            print(f"{ticker} - US 10Y yield alınamadı: {e}")
+            ws_dst["F45"].value = ""
 
-                # E41: Sector
-                try:
-                    ws_dst["E41"].value = yf_ticker.info.get("sector", "")
-                except Exception as e:
-                    print(f"{ticker} - sector alınamadı: {e}")
-                    ws_dst["E41"].value = ""
+        # I41: Earnings Date
+        try:
+            cal = yf_ticker.calendar
+            earning_date = ""
+            if isinstance(cal, pd.DataFrame):
+                if not cal.empty and "Earnings Date" in cal.index:
+                    earning_date = cal.loc["Earnings Date"][0]
+            elif isinstance(cal, dict):
+                earning_date = cal.get("Earnings Date", [None])[0]
+            ws_dst["I41"].value = str(earning_date) if earning_date else ""
+        except Exception as e:
+            print(f"{ticker} - earnings date alınamadı: {e}")
+            ws_dst["I41"].value = ""
 
-                # F41: Industry
-                try:
-                    ws_dst["F41"].value = yf_ticker.info.get("industry", "")
-                except Exception as e:
-                    print(f"{ticker} - industry alınamadı: {e}")
-                    ws_dst["F41"].value = ""
+        # Formül fonksiyonları (excel python donusum.txt) -- burada opsiyonel!
+        # Bu dosya yoksa bu satırı devre dışı bırakabilirsin:
+        try:
+            with open("excel python donusum.txt", "r", encoding="utf-8") as f:
+                formul_code = f.read()
+            formul_ns = {}
+            exec(formul_code, formul_ns)
+            formul_ns["hesapla_tum_formuller"](ws_dst)
+        except Exception as e:
+            print(f"Formül fonksiyonu hatası: {e}")
 
-                # G41: Employees
-                try:
-                    ws_dst["G41"].value = yf_ticker.info.get("fullTimeEmployees", "")
-                except Exception as e:
-                    print(f"{ticker} - employees alınamadı: {e}")
-                    ws_dst["G41"].value = ""
+        # Final2 dosyasını tekrar s3'e yükle
+        buffer = BytesIO()
+        wb_dst.save(buffer)
+        buffer.seek(0)
+        s3_write_bytes(dst_key, buffer.read())
+        print(f"Final2 kaydedildi: {dst_key}")
 
-                # H41: Description/Summary
-                try:
-                    summary = yf_ticker.info.get("longBusinessSummary", yf_ticker.info.get("summary", ""))
-                    ws_dst["H41"].value = summary
-                except Exception as e:
-                    print(f"{ticker} - description alınamadı: {e}")
-                    ws_dst["H41"].value = ""
-
-                # E45: Beta
-                try:
-                    ws_dst["E45"].value = yf_ticker.info.get("beta", "")
-                except Exception as e:
-                    print(f"{ticker} - beta alınamadı: {e}")
-                    ws_dst["E45"].value = ""
-
-                # F45: US 10-Year Treasury Yield
-                try:
-                    tnx_ticker = yf.Ticker("^TNX")
-                    tnx_yield = tnx_ticker.info.get("regularMarketPrice", "")
-                    ws_dst["F45"].value = tnx_yield
-                except Exception as e:
-                    print(f"{ticker} - US 10Y yield alınamadı: {e}")
-                    ws_dst["F45"].value = ""
-
-                # I41: Earnings Date
-                try:
-                    cal = yf_ticker.calendar
-                    earning_date = ""
-                    if isinstance(cal, pd.DataFrame):
-                        if not cal.empty and "Earnings Date" in cal.index:
-                            earning_date = cal.loc["Earnings Date"][0]
-                    elif isinstance(cal, dict):
-                        earning_date = cal.get("Earnings Date", [None])[0]
-                    ws_dst["I41"].value = str(earning_date) if earning_date else ""
-                except Exception as e:
-                    print(f"{ticker} - earnings date alınamadı: {e}")
-                    ws_dst["I41"].value = ""
-
-                formul_ns["hesapla_tum_formuller"](ws_dst)
-
-                # Final2 dosyasını tekrar s3'e yükle
-                buffer = BytesIO()
-                wb_dst.save(buffer)
-                buffer.seek(0)
-                s3_upload_bytes(dst_key, buffer.read())
-                print(f"[create_final2] Kaydedildi: {dst_key}")
-            except Exception as e:
-                print(f"[create_final2] Hata ({ticker}): {e}")
+    except Exception as e:
+        print(f"Final2 oluşturulamadı: {e}")
 
 def get_data_from_excel(filepath, range_tuple):
-    wb = openpyxl.load_workbook(BytesIO(s3_download_bytes(filepath)), data_only=True)
+    wb = openpyxl.load_workbook(BytesIO(s3_read_bytes(filepath)), data_only=True)
     ws = wb.active
     start_col, start_row = range_tuple[0][0], int(range_tuple[0][1:])
     end_col, end_row = range_tuple[1][0], int(range_tuple[1][1:])
@@ -495,6 +714,21 @@ def get_data_from_excel(filepath, range_tuple):
         values = [cell.value for cell in row]
         data.append(values)
     return data
+
+def insert_company_info_to_db(cursor, ticker, sector, industry, employees, earnings_date, summary, radar=None, market_cap=None):
+    sql = """
+        INSERT INTO company_info (ticker, sector, industry, employees, earnings_date, summary, radar, market_cap)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (ticker) DO UPDATE
+        SET sector=EXCLUDED.sector,
+            industry=EXCLUDED.industry,
+            employees=EXCLUDED.employees,
+            earnings_date=EXCLUDED.earnings_date,
+            summary=EXCLUDED.summary,
+            radar=EXCLUDED.radar,
+            market_cap=EXCLUDED.market_cap
+    """
+    cursor.execute(sql, (ticker, sector, industry, employees, earnings_date, summary, radar, market_cap))
 
 def insert_data_to_db(cursor, ticker, data):
     headers = data[0]
@@ -511,7 +745,7 @@ def insert_data_to_db(cursor, ticker, data):
             """
             cursor.execute(sql, (ticker, metric, period, str(value) if value is not None else None))
 
-def upload_changed_to_db(changed_tickers):
+def upload_to_db(ticker):
     db_user = os.getenv("DB_USER")
     db_pass = os.getenv("DB_PASS")
     db_host = os.getenv("DB_HOST")
@@ -527,101 +761,133 @@ def upload_changed_to_db(changed_tickers):
     )
 
     cursor = conn.cursor()
-    for ticker in changed_tickers:
-        fpath = s3_path(f"Final2/{ticker}.xlsx")
-        if not s3_file_exists(fpath):
-            print(f"{ticker}.xlsx Final2’de yok, atlanıyor.")
-            continue
-        try:
-            data = get_data_from_excel(fpath, EXCEL_RANGE)
-            insert_data_to_db(cursor, ticker, data)
-            conn.commit()
+    fpath = s3_path(f"Final2/{ticker}.xlsx")
+    if not s3_exists(fpath):
+        print(f"{ticker}.xlsx Final2’de yok, atlanıyor.")
+        return
+    try:
+        EXCEL_RANGE = ('A191', 'O202')
+        data = get_data_from_excel(fpath, EXCEL_RANGE)
+        insert_data_to_db(cursor, ticker, data)
+        conn.commit()
 
-            # --- GENEL FİRMASAL VERİLERİ EKLE ---
-            wb = openpyxl.load_workbook(BytesIO(s3_download_bytes(fpath)), data_only=True)
-            ws = wb.active
-            sector = ws["B204"].value
-            industry = ws["B205"].value
-            employees = ws["B206"].value
-            earnings_date = ws["B207"].value
-            summary = ws["B208"].value
-            radar = ws["B209"].value
-            market_cap = ws["B210"].value
+        # --- GENEL FİRMASAL VERİLERİ EKLE ---
+        wb = openpyxl.load_workbook(BytesIO(s3_read_bytes(fpath)), data_only=True)
+        ws = wb.active
+        sector = ws["B204"].value
+        industry = ws["B205"].value
+        employees = ws["B206"].value
+        earnings_date = ws["B207"].value
+        summary = ws["B208"].value
+        radar = ws["B209"].value
+        market_cap = ws["B210"].value
 
-            insert_company_info_to_db(cursor, ticker, sector, industry, employees, earnings_date, summary,
-                                      int(radar) if radar is not None else None,
-                                      int(market_cap) if market_cap is not None else None)
+        insert_company_info_to_db(cursor, ticker, sector, industry, employees, earnings_date, summary,
+                                  int(radar) if radar is not None else None,
+                                  int(market_cap) if market_cap is not None else None)
 
-            conn.commit()
-            print(f"{ticker} yüklendi.")
-        except Exception as e:
-            print(f"{ticker} hata: {e}")
+        conn.commit()
+        print(f"{ticker} yüklendi.")
+    except Exception as e:
+        print(f"{ticker} hata: {e}")
     cursor.close()
     conn.close()
 
-# ---------------------------------------------------------------------------
-#  ANA FONKSİYON
-# ---------------------------------------------------------------------------
-
 def main():
-    start_time = time.time()
+    try:
+        ticker, trigger_key = get_trigger_ticker()
+        print(f"Tetiklenen şirket: {ticker}  | Trigger dosyası: {trigger_key}")
 
-    before_times = get_final_xlsx_times(s3_path("Final"))
+        cik = get_cik_for_ticker(ticker)
+        print(f"{ticker} için CIK: {cik}")
 
-    proxy_blacklist = set()
-    proxy_pool = PROXIES.copy()
-    threads = []
+        # SEC API'den çekilecek gün aralığı
+        days = DAYS
 
-    for idx, script in enumerate(SCRIPTS):
-        if idx < len(EMAILS):
-            user_agent = EMAILS[idx]
-        else:
-            user_agent = EMAILS[-1]
-        t = threading.Thread(
-            target=script_launcher_loop,
-            args=(script, idx + 1, user_agent, proxy_pool, proxy_blacklist, proxies_in_use, proxy_lock)
-        )
-        t.start()
-        threads.append(t)
-        time.sleep(2)
+        # SEC veri çekimi
+        url = f"https://data.sec.gov/submissions/CIK{cik}.json"
+        print(f"SEC filings indiriliyor: {url}")
 
-    for t in threads:
-        t.join()
+        backoff_count = 0
+        while True:
+            try:
+                incr_request_and_sleep()
+                r = requests.get(url, headers=HEADERS)
+                if r.status_code in [429, 403]:
+                    backoff_count += 1
+                    print(f"⏳ Rate-limit algılandı! {backoff_count}. kez 2 dakika bekleniyor... [main] {url}")
+                    if backoff_count >= 3:
+                        print("❌ 3 kez üst üste backoff, script kill ediliyor!")
+                        sys.exit(1)
+                    time.sleep(120)
+                    continue
+                if r.status_code >= 400:
+                    print(f"⚠️ {ticker}: {cik} - API hatası veya veri yok. {r.status_code} {r.reason}")
+                    inc_error_and_kill_if_limit()
+                    return
+                data = r.json().get("filings", {}).get("recent", {})
+                break
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+                backoff_count += 1
+                print(f"🌐 Bağlantı hatası: {url}")
+                if backoff_count >= 3:
+                    print("❌ 3 kez üst üste backoff, script kill ediliyor!")
+                    sys.exit(1)
+                time.sleep(120)
+                continue
+            except Exception as e:
+                print(f"⚠️ {ticker}: {cik} - Veri çekilemedi: {e}")
+                inc_error_and_kill_if_limit()
+                return
 
-    elapsed = time.time() - start_time
-    minutes = int(elapsed // 60)
-    seconds = int(elapsed % 60)
-    sure_log = f"\nToplam çalışma süresi: {minutes} dakika {seconds} saniye\n"
-    print(sure_log)
+        forms = data.get("form", [])
+        accessions = data.get("accessionNumber", [])
+        report_dates = data.get("reportDate", [])
 
-    for script in SCRIPTS:
-        log_fname = f"log_{script.replace('.py','')}.txt"
-        log_s3key = s3_path(log_fname)
+        found = False
+        for i, ftype in enumerate(forms):
+            if ftype not in ["10-Q", "10-K"]:
+                continue
+            try:
+                rpt_date = datetime.strptime(report_dates[i], "%Y-%m-%d")
+            except:
+                continue
+            filter_date = (datetime.now(UTC) - timedelta(days=days)).date()
+            if rpt_date.date() < filter_date:
+                continue
+            acc = accessions[i].replace("-", "")
+            year = str(rpt_date.year)
+            month = rpt_date.month
+            quarter_idx = (month - 1) // 3 + 1
+            is_10k = (ftype == "10-K")
+            quarter_label = f"Q{quarter_idx}" if not is_10k else "Q4"
+            folder = f"Companies1/{ticker}"
+            index_url = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc}/index.html"
+            fname = f"{ticker}-{year}-{quarter_label}"
+            file_path, sym, y, q = download_xlsx(index_url, folder, fname, is_10k)
+            if file_path and sym and y and q:
+                extract_metrics(file_path, sym, y, q)
+                found = True
+                break  # Son 1 dosya yeterli, diğerlerini alma
+
+        if not found:
+            print(f"Son {days} günde {ticker} için yeni finansal bulunamadı!")
+            return
+
+        # Final2 excel oluştur
+        create_final2_file_for_ticker(ticker)
+
+        # DB'ye yükle
+        upload_to_db(ticker)
+
+    finally:
+        # Ne olursa olsun trigger dosyasını sil
         try:
-            old_content = s3_download_str(log_s3key)
-        except Exception:
-            old_content = ""
-        s3_upload_str(log_s3key, old_content + sure_log)
-
-    after_times = get_final_xlsx_times(s3_path("Final"))
-    changed_tickers = []
-
-    for ticker, new_time in after_times.items():
-        if ticker not in before_times:
-            changed_tickers.append(ticker)
-        elif before_times[ticker] != new_time:
-            changed_tickers.append(ticker)
-
-    if not changed_tickers:
-        print("[main] Final klasöründe hiç değişiklik olmamış, Final2 oluşturulmayacak. Çıkılıyor.")
-        return
-
-    print(f"[main] Değişen/eklenen şirketler: {changed_tickers}")
-    create_final2_files(filtered_tickers=changed_tickers)
-
-    if changed_tickers:
-        print("[main] Final2 excelleri DB’ye yükleniyor...")
-        upload_changed_to_db(changed_tickers)
+            _, trigger_key = get_trigger_ticker()
+            s3_delete(trigger_key)
+            print(f"Trigger dosyası silindi: {trigger_key}")
+        except Exception as e:
+            print(f"Trigger dosyası silinemedi: {e}")
 
 if __name__ == "__main__":
     main()
