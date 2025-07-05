@@ -74,19 +74,15 @@ def s3_list_dir(prefix):
 
 # ----------- Tetikleyici dosyasından ticker çekme -----------
 def get_trigger_ticker():
-    """Wasabi bucket'ında trigger*.txt dosyasını bulur, ticker'ı döndürür."""
-    resp = s3.list_objects_v2(Bucket=AWS_BUCKET)
-    trigger_key = None
-    ticker = None
-    for obj in resp.get('Contents', []):
-        key = obj['Key']
-        if key.startswith('trigger') and key.endswith('.txt') and len(key) > 10:
-            trigger_key = key
-            ticker = key[len('trigger'):-len('.txt')]
-            break
-    if not trigger_key or not ticker:
-        raise Exception("trigger*.txt bulunamadı!")
-    return ticker.upper(), trigger_key
+    """trigger.txt dosyasını okur, içindeki ticker'ı döndürür."""
+    key = "trigger.txt"
+    if not s3_exists(key):
+        raise Exception("trigger.txt bulunamadı!")
+    ticker = s3_read_text(key).strip()
+    if not ticker:
+        raise Exception("trigger.txt içinde ticker bulunamadı!")
+    return ticker.upper(), key
+
 
 # ----------- tickers.txt'den cik numarası bulma -----------
 def get_cik_for_ticker(ticker, tickers_file="tickers.txt"):

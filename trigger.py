@@ -25,11 +25,11 @@ s3 = boto3.client(
 def get_trigger_keys():
     try:
         resp = s3.list_objects_v2(Bucket=S3_BUCKET)
-        keys = [obj['Key'] for obj in resp.get('Contents', []) if
-                obj['Key'][:7] == 'trigger' and obj['Key'].endswith('.txt')]
+        keys = [obj['Key'] for obj in resp.get('Contents', []) if obj['Key'] == 'trigger.txt']
         return keys
     except Exception:
         return []
+
 
 def delete_trigger(key):
     try:
