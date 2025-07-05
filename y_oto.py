@@ -567,6 +567,31 @@ def extract_metrics(file_path, symbol, year, quarter):
 
 import yfinance as yf
 
+from requests import Session
+
+def yf_ticker_with_proxy(symbol: str):
+    headers, proxies = random_headers_and_proxy()
+    s = Session()
+    s.headers.update(headers)
+    s.proxies.update(proxies)
+    return yf.Ticker(symbol, session=s)
+
+
+def safe_info(symbol, retries=3, wait=3):
+    """
+    Proxy / rate-limit hatasında yeni proxy ile tekrar dener
+    """
+    for n in range(retries):
+        try:
+            t = yf_ticker_with_proxy(symbol)
+            return t.info
+        except Exception as e:
+            print(f"{symbol} info deneme {n+1}/{retries} hata: {e}")
+            time.sleep(wait * (n+1))  # kademeli bekle
+    return {}
+
+
+
 def fill_dates_and_prices_in_ws(ws_dst):
     ticker = ws_dst["B40"].value
     index_ticker = ws_dst["C40"].value
@@ -591,7 +616,7 @@ def fill_dates_and_prices_in_ws(ws_dst):
 
     def get_hist(ticker_code):
         try:
-            yf_ticker = yf.Ticker(ticker_code)
+            yf_ticker = yf_ticker_with_proxy(ticker_code)
             hist = yf_ticker.history(start=min_date.strftime("%Y-%m-%d"), end=(curr_date + timedelta(days=1)).strftime("%Y-%m-%d"))
             hist = hist.reset_index()
             if 'Date' in hist:
@@ -681,59 +706,50 @@ def create_final2_file_for_ticker(ticker):
 
         fill_dates_and_prices_in_ws(ws_dst)
 
-        yf_ticker = yf.Ticker(ticker)
+        yf_ticker = yf_ticker_with_proxy(ticker)
+        info = safe_info(ticker)
 
         try:
-            time.sleep(1)
-            ws_dst["E41"].value = yf_ticker.info.get("sector", "")
+            time.sleep(5)
+            ws_dst["E41"].value = info.get("sector", "")
         except Exception as e:
             print(f"{ticker} - sector alınamadı: {e}")
             ws_dst["E41"].value = ""
 
         try:
-            time.sleep(1)
-            ws_dst["F41"].value = yf_ticker.info.get("industry", "")
+            time.sleep(5)
+            ws_dst["F41"].value = info.get("industry", "")
         except Exception as e:
             print(f"{ticker} - industry alınamadı: {e}")
             ws_dst["F41"].value = ""
 
         try:
-            time.sleep(1)
-            ws_dst["G41"].value = yf_ticker.info.get("fullTimeEmployees", "")
+            time.sleep(5)
+            ws_dst["G41"].value = info.get("fullTimeEmployees", "")
         except Exception as e:
             print(f"{ticker} - employees alınamadı: {e}")
             ws_dst["G41"].value = ""
 
         try:
-            time.sleep(1)
-            summary = yf_ticker.info.get("longBusinessSummary", yf_ticker.info.get("summary", ""))
+            time.sleep(5)
+            summary = info.get("longBusinessSummary", info.get("summary", ""))
             ws_dst["H41"].value = summary
         except Exception as e:
             print(f"{ticker} - description alınamadı: {e}")
             ws_dst["H41"].value = ""
 
         try:
-            time.sleep(1)
-            ws_dst["E45"].value = yf_ticker.info.get("beta", "")
+            time.sleep(5)
+            ws_dst["E45"].value = info.get("beta", "")
         except Exception as e:
             print(f"{ticker} - beta alınamadı: {e}")
             ws_dst["E45"].value = ""
 
-        try:
-            time.sleep(1)
-            tnx_ticker = yf.Ticker("^TNX")
-            tnx_yield = tnx_ticker.info.get("regularMarketPrice", "")
-            ws_dst["F45"].value = tnx_yield
-        except Exception as e:
-            print(f"{ticker} - US 10Y yield alınamadı: {e}")
-            ws_dst["F45"].value = ""
-        finally:
-            try: del tnx_ticker
-            except: pass
-            import gc; gc.collect()
+        tnx_yield = safe_info("^TNX").get("regularMarketPrice", "")
+        ws_dst["F45"].value = tnx_yield
 
         try:
-            time.sleep(1)
+            time.sleep(5)
             cal = yf_ticker.calendar
             earning_date = ""
             if isinstance(cal, pd.DataFrame):
