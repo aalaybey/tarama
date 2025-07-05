@@ -733,6 +733,10 @@ def insert_data_to_db(cursor, ticker, data):
         for i in range(1, len(headers)):
             period = headers[i]
             value = row[i]
+            if period is None or period == 0 or str(period).strip() == "":
+                continue  # period boşsa veya 0'sa atla
+            if value is None or str(value).strip() == "" or str(value).startswith("#VALUE"):
+                continue  # value boşsa veya hata ise atla
             sql = """
             INSERT INTO excel_metrics (ticker, metric, period, value)
             VALUES (%s, %s, %s, %s)
