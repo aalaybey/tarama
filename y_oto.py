@@ -13,10 +13,19 @@ import threading
 import boto3
 from io import BytesIO, StringIO
 from botocore.client import Config
-
 import subprocess
 import random
 import psycopg2
+import psutil
+
+
+def cpu_throttle(threshold=75, min_sleep=1, max_sleep=10):
+    usage = psutil.cpu_percent(interval=0.2)
+    if usage > threshold:
+        sleep_time = min(max_sleep, (usage-threshold)/10 + min_sleep)
+        print(f"[CPU Throttle] CPU {usage:.1f}% → {sleep_time}s uykuya alınıyor.")
+        time.sleep(sleep_time)
+
 
 # --- User agent ve proxy listelerini oku ---
 def load_email_list(path="emailler.txt"):
@@ -388,6 +397,8 @@ def s3_write_excel(df, key):
 
 def extract_metrics(file_path, symbol, year, quarter):
     print(f"📊 Veriler çıkarılıyor: {symbol} - {year} {quarter}")
+    cpu_throttle()
+
 
     try:
         wb = s3_load_workbook(file_path)
@@ -559,6 +570,8 @@ import yfinance as yf
 def fill_dates_and_prices_in_ws(ws_dst):
     ticker = ws_dst["B40"].value
     index_ticker = ws_dst["C40"].value
+    cpu_throttle()
+
 
     if not ticker:
         print(f"B40 hücresinde ticker yok, atlanıyor.")
@@ -630,6 +643,7 @@ def fill_dates_and_prices_in_ws(ws_dst):
 
 def create_final2_file_for_ticker(ticker):
     final_folder = s3_path("Final")
+    cpu_throttle()
     final2_folder = s3_path("Final2")
     template_path = s3_path("Companies1/donusturucu.xlsx")
 
@@ -779,6 +793,7 @@ def create_final2_file_for_ticker(ticker):
 
 def get_data_from_excel(filepath, range_tuple):
     wb = openpyxl.load_workbook(BytesIO(s3_read_bytes(filepath)), data_only=True)
+    cpu_throttle()
     ws = wb.active
     start_col, start_row = range_tuple[0][0], int(range_tuple[0][1:])
     end_col, end_row = range_tuple[1][0], int(range_tuple[1][1:])
@@ -826,6 +841,7 @@ def insert_data_to_db(cursor, ticker, data):
 
 def upload_to_db(ticker):
     db_user = os.getenv("DB_USER")
+    cpu_throttle()
     db_pass = os.getenv("DB_PASS")
     db_host = os.getenv("DB_HOST")
     db_port = os.getenv("DB_PORT", "5432")
@@ -883,6 +899,7 @@ def upload_to_db(ticker):
 
 def main():
     try:
+        cpu_throttle()
         ticker, trigger_key = get_trigger_ticker()
         print(f"Tetiklenen şirket: {ticker}  | Trigger dosyası: {trigger_key}")
 
@@ -935,6 +952,7 @@ def main():
 
         found = False
         for i, ftype in enumerate(forms):
+            cpu_throttle()
             if ftype not in ["10-Q", "10-K"]:
                 continue
             try:
