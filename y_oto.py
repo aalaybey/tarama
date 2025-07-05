@@ -27,7 +27,7 @@ AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET")
 ENDPOINT_URL = f"https://s3.{AWS_REGION}.wasabisys.com"
 
-USER_AGENT = "Mozilla/5.0 (compatible; SEC/1.0; +https://www.sec.gov)"  # Kendi SEC-compliant agent
+USER_AGENT = "Alper Alaybey <a.alaybey@gmail.com>"  # Kendi SEC-compliant agent
 HEADERS = {"User-Agent": USER_AGENT}
 
 s3 = boto3.client(
