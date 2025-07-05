@@ -841,13 +841,13 @@ def main():
         report_dates = data.get("reportDate", [])
 
         found = False
-        for i, ftype in enumerate(forms):
+        N = min(len(forms), len(report_dates), len(accessions))
+        for i in range(N):
+            ftype = forms[i]
+            rd = report_dates[i]
+            acc = accessions[i]
             if ftype not in ["10-Q", "10-K"]:
                 continue
-            # BOŞ/GEÇERSİZ reportDate KONTROLÜ
-            if i >= len(report_dates):
-                continue
-            rd = report_dates[i]
             if not rd or not rd.strip():
                 continue
             try:
@@ -857,7 +857,7 @@ def main():
             filter_date = (datetime.now(UTC) - timedelta(days=days)).date()
             if rpt_date.date() < filter_date:
                 continue
-            acc = accessions[i].replace("-", "")
+            acc = acc.replace("-", "")
             year = str(rpt_date.year)
             month = rpt_date.month
             quarter_idx = (month - 1) // 3 + 1
