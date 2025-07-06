@@ -7480,117 +7480,117 @@ def hesapla_tum_formuller(ws):
         ws["Y191"].value = None
     import gc; gc.collect()
     try:
-        ws["C192"].value = ws["B153"].value  # =B153
+        ws["C192"].value = ws["B154"].value/ws["B141"].value  # =B154/$B$141
     except Exception:
         ws["C192"].value = None
     import gc; gc.collect()
     try:
-        ws["D192"].value = ws["C153"].value  # =C153
+        ws["D192"].value = ws["C154"].value/ws["B141"].value  # =C154/$B$141
     except Exception:
         ws["D192"].value = None
     import gc; gc.collect()
     try:
-        ws["E192"].value = ws["D153"].value  # =D153
+        ws["E192"].value = ws["D154"].value/ws["B141"].value  # =D154/$B$141
     except Exception:
         ws["E192"].value = None
     import gc; gc.collect()
     try:
-        ws["F192"].value = ws["E153"].value  # =E153
+        ws["F192"].value = ws["E154"].value/ws["B141"].value  # =E154/$B$141
     except Exception:
         ws["F192"].value = None
     import gc; gc.collect()
     try:
-        ws["G192"].value = ws["F153"].value  # =F153
+        ws["G192"].value = ws["F154"].value/ws["B141"].value  # =F154/$B$141
     except Exception:
         ws["G192"].value = None
     import gc; gc.collect()
     try:
-        ws["H192"].value = ws["G153"].value  # =G153
+        ws["H192"].value = ws["G154"].value/ws["B141"].value  # =G154/$B$141
     except Exception:
         ws["H192"].value = None
     import gc; gc.collect()
     try:
-        ws["I192"].value = ws["H153"].value  # =H153
+        ws["I192"].value = ws["H154"].value/ws["B141"].value  # =H154/$B$141
     except Exception:
         ws["I192"].value = None
     import gc; gc.collect()
     try:
-        ws["J192"].value = ws["I153"].value  # =I153
+        ws["J192"].value = ws["I154"].value/ws["B141"].value  # =I154/$B$141
     except Exception:
         ws["J192"].value = None
     import gc; gc.collect()
     try:
-        ws["K192"].value = ws["J153"].value  # =J153
+        ws["K192"].value = ws["J154"].value/ws["B141"].value  # =J154/$B$141
     except Exception:
         ws["K192"].value = None
     import gc; gc.collect()
     try:
-        ws["L192"].value = ws["K153"].value  # =K153
+        ws["L192"].value = ws["K154"].value/ws["B141"].value  # =K154/$B$141
     except Exception:
         ws["L192"].value = None
     import gc; gc.collect()
     try:
-        ws["M192"].value = ws["L153"].value  # =L153
+        ws["M192"].value = ws["L154"].value/ws["B141"].value  # =L154/$B$141
     except Exception:
         ws["M192"].value = None
     import gc; gc.collect()
     try:
-        ws["N192"].value = ws["M153"].value  # =M153
+        ws["N192"].value = ws["M154"].value/ws["B141"].value  # =M154/$B$141
     except Exception:
         ws["N192"].value = None
     import gc; gc.collect()
     try:
-        ws["O192"].value = ws["N153"].value  # =N153
+        ws["O192"].value = ws["N154"].value/ws["B141"].value  # =N154/$B$141
     except Exception:
         ws["O192"].value = None
     import gc; gc.collect()
     try:
-        ws["P192"].value = ws["O153"].value  # =O153
+        ws["P192"].value = ws["O154"].value/ws["B141"].value  # =O154/$B$141
     except Exception:
         ws["P192"].value = None
     import gc; gc.collect()
     try:
-        ws["Q192"].value = ws["P153"].value  # =P153
+        ws["Q192"].value = ws["P154"].value/ws["B141"].value  # =P154/$B$141
     except Exception:
         ws["Q192"].value = None
     import gc; gc.collect()
     try:
-        ws["R192"].value = ws["Q153"].value  # =Q153
+        ws["R192"].value = ws["Q154"].value/ws["B141"].value  # =Q154/$B$141
     except Exception:
         ws["R192"].value = None
     import gc; gc.collect()
     try:
-        ws["S192"].value = ws["R153"].value  # =R153
+        ws["S192"].value = ws["R154"].value/ws["B141"].value  # =R154/$B$141
     except Exception:
         ws["S192"].value = None
     import gc; gc.collect()
     try:
-        ws["T192"].value = ws["S153"].value  # =S153
+        ws["T192"].value = ws["S154"].value/ws["B141"].value  # =S154/$B$141
     except Exception:
         ws["T192"].value = None
     import gc; gc.collect()
     try:
-        ws["U192"].value = ws["T153"].value  # =T153
+        ws["U192"].value = ws["T154"].value/ws["B141"].value  # =T154/$B$141
     except Exception:
         ws["U192"].value = None
     import gc; gc.collect()
     try:
-        ws["V192"].value = ws["U153"].value  # =U153
+        ws["V192"].value = ws["U154"].value/ws["B141"].value  # =U154/$B$141
     except Exception:
         ws["V192"].value = None
     import gc; gc.collect()
     try:
-        ws["W192"].value = ws["V153"].value  # =V153
+        ws["W192"].value = ws["V154"].value/ws["B141"].value  # =V154/$B$141
     except Exception:
         ws["W192"].value = None
     import gc; gc.collect()
     try:
-        ws["X192"].value = ws["W153"].value  # =W153
+        ws["X192"].value = ws["W154"].value/ws["B141"].value  # =W154/$B$141
     except Exception:
         ws["X192"].value = None
     import gc; gc.collect()
     try:
-        ws["Y192"].value = ws["X153"].value  # =X153
+        ws["Y192"].value = ws["X154"].value/ws["B141"].value  # =X154/$B$141
     except Exception:
         ws["Y192"].value = None
     import gc; gc.collect()
@@ -8820,7 +8820,7 @@ def hesapla_tum_formuller(ws):
         ws["B208"].value = None
     import gc; gc.collect()
     try:
-        ws["B209"].value = excel_IF(ws["B205"].value=="Oil & Gas E&P", 0, excel_IF(ws["B193"].value<ws["C192"].value, 0, excel_IF(ws["B194"].value>excel_IF(ws["C194"].value>0, ws["C194"].value, ws["B194"].value), 0, excel_IF(ws["B194"].value<excel_IF(ws["C194"].value<0, ws["C194"].value, ws["B194"].value), 0, excel_IF(ws["B195"].value<0, 0, excel_IF(ws["B196"].value<ws["C196"].value, 0, excel_IF(ws["B197"].value<ws["C197"].value, 0, excel_IF(ws["B193"].value<ws["C193"].value, 0, 1))))))))  # =IF(B205="Oil & Gas E&P",0,IF(B193<C192,0,IF(B194>IF(C194>0,C194,B194),0,IF(B194<IF(C194<0,C194,B194),0,IF(B195<0,0,IF(B196<C196,0,IF(B197<C197,0,IF(B193<C193,0,1))))))))
+        ws["B209"].value = excel_IF(ws["B205"].value=="Oil & Gas E&P", 0, excel_IF(ws["B193"].value<ws["C192"].value, 0, excel_IF(ws["B194"].value>excel_IF(ws["C194"].value>0, ws["C194"].value, ws["B194"].value), 0, excel_IF(ws["B194"].value<excel_IF(ws["C194"].value<0, ws["C194"].value, ws["B194"].value), 0, excel_IF(ws["B195"].value<0, 0, excel_IF(ws["B196"].value<ws["C196"].value, 0, excel_IF(ws["B197"].value<ws["C197"].value, 0, excel_IF(ws["B193"].value<ws["C193"].value, 0, excel_IF(ws["B204"].value=="Financial Services", 0, excel_IF(ws["B204"].value=="Utilities", 0, excel_IF(ws["B204"].value=="Real Estate", 0, excel_IF(ws["B204"].value=="Healthcare", 0, excel_IF(ws["B205"].value=="Oil & Gas Equipment & Services", 0, 1)))))))))))))  # =IF(B205="Oil & Gas E&P",0,IF(B193<C192,0,IF(B194>IF(C194>0,C194,B194),0,IF(B194<IF(C194<0,C194,B194),0,IF(B195<0,0,IF(B196<C196,0,IF(B197<C197,0,IF(B193<C193,0,IF(B204="Financial Services",0,IF(B204="Utilities",0,IF(B204="Real Estate",0,IF(B204="Healthcare",0,IF(B205="Oil & Gas Equipment & Services",0,1)))))))))))))
     except Exception:
         ws["B209"].value = None
     import gc; gc.collect()
