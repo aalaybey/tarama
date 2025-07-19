@@ -1,10 +1,11 @@
+requests
 boto3
 botocore
-openpyxl
 pandas
-psycopg2-binary
-requests
-yfinance
+openpyxl
 beautifulsoup4
+lxml
+selenium
+yfinance
 portalocker
-psutil
+psycopg2-binary

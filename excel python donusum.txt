@@ -395,132 +395,132 @@ def hesapla_tum_formuller(ws):
         ws["AA111"].value = None
     import gc; gc.collect()
     try:
-        ws["B112"].value = ws["B6"].value+ws["B7"].value  # =B6+B7
+        ws["B112"].value = ws["B6"].value+excel_IF(ws["B7"].value<0, 0, ws["B7"].value)  # =B6+IF(B7<0,0,B7)
     except Exception:
         ws["B112"].value = None
     import gc; gc.collect()
     try:
-        ws["C112"].value = ws["C6"].value+ws["C7"].value  # =C6+C7
+        ws["C112"].value = ws["C6"].value+excel_IF(ws["C7"].value<0, 0, ws["C7"].value)  # =C6+IF(C7<0,0,C7)
     except Exception:
         ws["C112"].value = None
     import gc; gc.collect()
     try:
-        ws["D112"].value = ws["D6"].value+ws["D7"].value  # =D6+D7
+        ws["D112"].value = ws["D6"].value+excel_IF(ws["D7"].value<0, 0, ws["D7"].value)  # =D6+IF(D7<0,0,D7)
     except Exception:
         ws["D112"].value = None
     import gc; gc.collect()
     try:
-        ws["E112"].value = ws["E6"].value+ws["E7"].value  # =E6+E7
+        ws["E112"].value = ws["E6"].value+excel_IF(ws["E7"].value<0, 0, ws["E7"].value)  # =E6+IF(E7<0,0,E7)
     except Exception:
         ws["E112"].value = None
     import gc; gc.collect()
     try:
-        ws["F112"].value = ws["F6"].value+ws["F7"].value  # =F6+F7
+        ws["F112"].value = ws["F6"].value+excel_IF(ws["F7"].value<0, 0, ws["F7"].value)  # =F6+IF(F7<0,0,F7)
     except Exception:
         ws["F112"].value = None
     import gc; gc.collect()
     try:
-        ws["G112"].value = ws["G6"].value+ws["G7"].value  # =G6+G7
+        ws["G112"].value = ws["G6"].value+excel_IF(ws["G7"].value<0, 0, ws["G7"].value)  # =G6+IF(G7<0,0,G7)
     except Exception:
         ws["G112"].value = None
     import gc; gc.collect()
     try:
-        ws["H112"].value = ws["H6"].value+ws["H7"].value  # =H6+H7
+        ws["H112"].value = ws["H6"].value+excel_IF(ws["H7"].value<0, 0, ws["H7"].value)  # =H6+IF(H7<0,0,H7)
     except Exception:
         ws["H112"].value = None
     import gc; gc.collect()
     try:
-        ws["I112"].value = ws["I6"].value+ws["I7"].value  # =I6+I7
+        ws["I112"].value = ws["I6"].value+excel_IF(ws["I7"].value<0, 0, ws["I7"].value)  # =I6+IF(I7<0,0,I7)
     except Exception:
         ws["I112"].value = None
     import gc; gc.collect()
     try:
-        ws["J112"].value = ws["J6"].value+ws["J7"].value  # =J6+J7
+        ws["J112"].value = ws["J6"].value+excel_IF(ws["J7"].value<0, 0, ws["J7"].value)  # =J6+IF(J7<0,0,J7)
     except Exception:
         ws["J112"].value = None
     import gc; gc.collect()
     try:
-        ws["K112"].value = ws["K6"].value+ws["K7"].value  # =K6+K7
+        ws["K112"].value = ws["K6"].value+excel_IF(ws["K7"].value<0, 0, ws["K7"].value)  # =K6+IF(K7<0,0,K7)
     except Exception:
         ws["K112"].value = None
     import gc; gc.collect()
     try:
-        ws["L112"].value = ws["L6"].value+ws["L7"].value  # =L6+L7
+        ws["L112"].value = ws["L6"].value+excel_IF(ws["L7"].value<0, 0, ws["L7"].value)  # =L6+IF(L7<0,0,L7)
     except Exception:
         ws["L112"].value = None
     import gc; gc.collect()
     try:
-        ws["M112"].value = ws["M6"].value+ws["M7"].value  # =M6+M7
+        ws["M112"].value = ws["M6"].value+excel_IF(ws["M7"].value<0, 0, ws["M7"].value)  # =M6+IF(M7<0,0,M7)
     except Exception:
         ws["M112"].value = None
     import gc; gc.collect()
     try:
-        ws["N112"].value = ws["N6"].value+ws["N7"].value  # =N6+N7
+        ws["N112"].value = ws["N6"].value+excel_IF(ws["N7"].value<0, 0, ws["N7"].value)  # =N6+IF(N7<0,0,N7)
     except Exception:
         ws["N112"].value = None
     import gc; gc.collect()
     try:
-        ws["O112"].value = ws["O6"].value+ws["O7"].value  # =O6+O7
+        ws["O112"].value = ws["O6"].value+excel_IF(ws["O7"].value<0, 0, ws["O7"].value)  # =O6+IF(O7<0,0,O7)
     except Exception:
         ws["O112"].value = None
     import gc; gc.collect()
     try:
-        ws["P112"].value = ws["P6"].value+ws["P7"].value  # =P6+P7
+        ws["P112"].value = ws["P6"].value+excel_IF(ws["P7"].value<0, 0, ws["P7"].value)  # =P6+IF(P7<0,0,P7)
     except Exception:
         ws["P112"].value = None
     import gc; gc.collect()
     try:
-        ws["Q112"].value = ws["Q6"].value+ws["Q7"].value  # =Q6+Q7
+        ws["Q112"].value = ws["Q6"].value+excel_IF(ws["Q7"].value<0, 0, ws["Q7"].value)  # =Q6+IF(Q7<0,0,Q7)
     except Exception:
         ws["Q112"].value = None
     import gc; gc.collect()
     try:
-        ws["R112"].value = ws["R6"].value+ws["R7"].value  # =R6+R7
+        ws["R112"].value = ws["R6"].value+excel_IF(ws["R7"].value<0, 0, ws["R7"].value)  # =R6+IF(R7<0,0,R7)
     except Exception:
         ws["R112"].value = None
     import gc; gc.collect()
     try:
-        ws["S112"].value = ws["S6"].value+ws["S7"].value  # =S6+S7
+        ws["S112"].value = ws["S6"].value+excel_IF(ws["S7"].value<0, 0, ws["S7"].value)  # =S6+IF(S7<0,0,S7)
     except Exception:
         ws["S112"].value = None
     import gc; gc.collect()
     try:
-        ws["T112"].value = ws["T6"].value+ws["T7"].value  # =T6+T7
+        ws["T112"].value = ws["T6"].value+excel_IF(ws["T7"].value<0, 0, ws["T7"].value)  # =T6+IF(T7<0,0,T7)
     except Exception:
         ws["T112"].value = None
     import gc; gc.collect()
     try:
-        ws["U112"].value = ws["U6"].value+ws["U7"].value  # =U6+U7
+        ws["U112"].value = ws["U6"].value+excel_IF(ws["U7"].value<0, 0, ws["U7"].value)  # =U6+IF(U7<0,0,U7)
     except Exception:
         ws["U112"].value = None
     import gc; gc.collect()
     try:
-        ws["V112"].value = ws["V6"].value+ws["V7"].value  # =V6+V7
+        ws["V112"].value = ws["V6"].value+excel_IF(ws["V7"].value<0, 0, ws["V7"].value)  # =V6+IF(V7<0,0,V7)
     except Exception:
         ws["V112"].value = None
     import gc; gc.collect()
     try:
-        ws["W112"].value = ws["W6"].value+ws["W7"].value  # =W6+W7
+        ws["W112"].value = ws["W6"].value+excel_IF(ws["W7"].value<0, 0, ws["W7"].value)  # =W6+IF(W7<0,0,W7)
     except Exception:
         ws["W112"].value = None
     import gc; gc.collect()
     try:
-        ws["X112"].value = ws["X6"].value+ws["X7"].value  # =X6+X7
+        ws["X112"].value = ws["X6"].value+excel_IF(ws["X7"].value<0, 0, ws["X7"].value)  # =X6+IF(X7<0,0,X7)
     except Exception:
         ws["X112"].value = None
     import gc; gc.collect()
     try:
-        ws["Y112"].value = ws["Y6"].value+ws["Y7"].value  # =Y6+Y7
+        ws["Y112"].value = ws["Y6"].value+excel_IF(ws["Y7"].value<0, 0, ws["Y7"].value)  # =Y6+IF(Y7<0,0,Y7)
     except Exception:
         ws["Y112"].value = None
     import gc; gc.collect()
     try:
-        ws["Z112"].value = ws["Z6"].value+ws["Z7"].value  # =Z6+Z7
+        ws["Z112"].value = ws["Z6"].value+excel_IF(ws["Z7"].value<0, 0, ws["Z7"].value)  # =Z6+IF(Z7<0,0,Z7)
     except Exception:
         ws["Z112"].value = None
     import gc; gc.collect()
     try:
-        ws["AA112"].value = ws["AA6"].value+ws["AA7"].value  # =AA6+AA7
+        ws["AA112"].value = ws["AA6"].value+excel_IF(ws["AA7"].value<0, 0, ws["AA7"].value)  # =AA6+IF(AA7<0,0,AA7)
     except Exception:
         ws["AA112"].value = None
     import gc; gc.collect()
@@ -4870,132 +4870,132 @@ def hesapla_tum_formuller(ws):
         ws["AA148"].value = None
     import gc; gc.collect()
     try:
-        ws["B149"].value = ((1+ws["B148"].value)**(1/3))-1  # =((1+B148)^(1/3))-1
+        ws["B149"].value = excel_IF(ws["B125"].value==0, 0, ((1+ws["B148"].value)**(1/3))-1)  # =IF(B125=0,0,((1+B148)^(1/3))-1)
     except Exception:
         ws["B149"].value = None
     import gc; gc.collect()
     try:
-        ws["C149"].value = ((1+ws["C148"].value)**(1/3))-1  # =((1+C148)^(1/3))-1
+        ws["C149"].value = excel_IF(ws["C125"].value==0, 0, ((1+ws["C148"].value)**(1/3))-1)  # =IF(C125=0,0,((1+C148)^(1/3))-1)
     except Exception:
         ws["C149"].value = None
     import gc; gc.collect()
     try:
-        ws["D149"].value = ((1+ws["D148"].value)**(1/3))-1  # =((1+D148)^(1/3))-1
+        ws["D149"].value = excel_IF(ws["D125"].value==0, 0, ((1+ws["D148"].value)**(1/3))-1)  # =IF(D125=0,0,((1+D148)^(1/3))-1)
     except Exception:
         ws["D149"].value = None
     import gc; gc.collect()
     try:
-        ws["E149"].value = ((1+ws["E148"].value)**(1/3))-1  # =((1+E148)^(1/3))-1
+        ws["E149"].value = excel_IF(ws["E125"].value==0, 0, ((1+ws["E148"].value)**(1/3))-1)  # =IF(E125=0,0,((1+E148)^(1/3))-1)
     except Exception:
         ws["E149"].value = None
     import gc; gc.collect()
     try:
-        ws["F149"].value = ((1+ws["F148"].value)**(1/3))-1  # =((1+F148)^(1/3))-1
+        ws["F149"].value = excel_IF(ws["F125"].value==0, 0, ((1+ws["F148"].value)**(1/3))-1)  # =IF(F125=0,0,((1+F148)^(1/3))-1)
     except Exception:
         ws["F149"].value = None
     import gc; gc.collect()
     try:
-        ws["G149"].value = ((1+ws["G148"].value)**(1/3))-1  # =((1+G148)^(1/3))-1
+        ws["G149"].value = excel_IF(ws["G125"].value==0, 0, ((1+ws["G148"].value)**(1/3))-1)  # =IF(G125=0,0,((1+G148)^(1/3))-1)
     except Exception:
         ws["G149"].value = None
     import gc; gc.collect()
     try:
-        ws["H149"].value = ((1+ws["H148"].value)**(1/3))-1  # =((1+H148)^(1/3))-1
+        ws["H149"].value = excel_IF(ws["H125"].value==0, 0, ((1+ws["H148"].value)**(1/3))-1)  # =IF(H125=0,0,((1+H148)^(1/3))-1)
     except Exception:
         ws["H149"].value = None
     import gc; gc.collect()
     try:
-        ws["I149"].value = ((1+ws["I148"].value)**(1/3))-1  # =((1+I148)^(1/3))-1
+        ws["I149"].value = excel_IF(ws["I125"].value==0, 0, ((1+ws["I148"].value)**(1/3))-1)  # =IF(I125=0,0,((1+I148)^(1/3))-1)
     except Exception:
         ws["I149"].value = None
     import gc; gc.collect()
     try:
-        ws["J149"].value = ((1+ws["J148"].value)**(1/3))-1  # =((1+J148)^(1/3))-1
+        ws["J149"].value = excel_IF(ws["J125"].value==0, 0, ((1+ws["J148"].value)**(1/3))-1)  # =IF(J125=0,0,((1+J148)^(1/3))-1)
     except Exception:
         ws["J149"].value = None
     import gc; gc.collect()
     try:
-        ws["K149"].value = ((1+ws["K148"].value)**(1/3))-1  # =((1+K148)^(1/3))-1
+        ws["K149"].value = excel_IF(ws["K125"].value==0, 0, ((1+ws["K148"].value)**(1/3))-1)  # =IF(K125=0,0,((1+K148)^(1/3))-1)
     except Exception:
         ws["K149"].value = None
     import gc; gc.collect()
     try:
-        ws["L149"].value = ((1+ws["L148"].value)**(1/3))-1  # =((1+L148)^(1/3))-1
+        ws["L149"].value = excel_IF(ws["L125"].value==0, 0, ((1+ws["L148"].value)**(1/3))-1)  # =IF(L125=0,0,((1+L148)^(1/3))-1)
     except Exception:
         ws["L149"].value = None
     import gc; gc.collect()
     try:
-        ws["M149"].value = ((1+ws["M148"].value)**(1/3))-1  # =((1+M148)^(1/3))-1
+        ws["M149"].value = excel_IF(ws["M125"].value==0, 0, ((1+ws["M148"].value)**(1/3))-1)  # =IF(M125=0,0,((1+M148)^(1/3))-1)
     except Exception:
         ws["M149"].value = None
     import gc; gc.collect()
     try:
-        ws["N149"].value = ((1+ws["N148"].value)**(1/3))-1  # =((1+N148)^(1/3))-1
+        ws["N149"].value = excel_IF(ws["N125"].value==0, 0, ((1+ws["N148"].value)**(1/3))-1)  # =IF(N125=0,0,((1+N148)^(1/3))-1)
     except Exception:
         ws["N149"].value = None
     import gc; gc.collect()
     try:
-        ws["O149"].value = ((1+ws["O148"].value)**(1/3))-1  # =((1+O148)^(1/3))-1
+        ws["O149"].value = excel_IF(ws["O125"].value==0, 0, ((1+ws["O148"].value)**(1/3))-1)  # =IF(O125=0,0,((1+O148)^(1/3))-1)
     except Exception:
         ws["O149"].value = None
     import gc; gc.collect()
     try:
-        ws["P149"].value = ((1+ws["P148"].value)**(1/3))-1  # =((1+P148)^(1/3))-1
+        ws["P149"].value = excel_IF(ws["P125"].value==0, 0, ((1+ws["P148"].value)**(1/3))-1)  # =IF(P125=0,0,((1+P148)^(1/3))-1)
     except Exception:
         ws["P149"].value = None
     import gc; gc.collect()
     try:
-        ws["Q149"].value = ((1+ws["Q148"].value)**(1/3))-1  # =((1+Q148)^(1/3))-1
+        ws["Q149"].value = excel_IF(ws["Q125"].value==0, 0, ((1+ws["Q148"].value)**(1/3))-1)  # =IF(Q125=0,0,((1+Q148)^(1/3))-1)
     except Exception:
         ws["Q149"].value = None
     import gc; gc.collect()
     try:
-        ws["R149"].value = ((1+ws["R148"].value)**(1/3))-1  # =((1+R148)^(1/3))-1
+        ws["R149"].value = excel_IF(ws["R125"].value==0, 0, ((1+ws["R148"].value)**(1/3))-1)  # =IF(R125=0,0,((1+R148)^(1/3))-1)
     except Exception:
         ws["R149"].value = None
     import gc; gc.collect()
     try:
-        ws["S149"].value = ((1+ws["S148"].value)**(1/3))-1  # =((1+S148)^(1/3))-1
+        ws["S149"].value = excel_IF(ws["S125"].value==0, 0, ((1+ws["S148"].value)**(1/3))-1)  # =IF(S125=0,0,((1+S148)^(1/3))-1)
     except Exception:
         ws["S149"].value = None
     import gc; gc.collect()
     try:
-        ws["T149"].value = ((1+ws["T148"].value)**(1/3))-1  # =((1+T148)^(1/3))-1
+        ws["T149"].value = excel_IF(ws["T125"].value==0, 0, ((1+ws["T148"].value)**(1/3))-1)  # =IF(T125=0,0,((1+T148)^(1/3))-1)
     except Exception:
         ws["T149"].value = None
     import gc; gc.collect()
     try:
-        ws["U149"].value = ((1+ws["U148"].value)**(1/3))-1  # =((1+U148)^(1/3))-1
+        ws["U149"].value = excel_IF(ws["U125"].value==0, 0, ((1+ws["U148"].value)**(1/3))-1)  # =IF(U125=0,0,((1+U148)^(1/3))-1)
     except Exception:
         ws["U149"].value = None
     import gc; gc.collect()
     try:
-        ws["V149"].value = ((1+ws["V148"].value)**(1/3))-1  # =((1+V148)^(1/3))-1
+        ws["V149"].value = excel_IF(ws["V125"].value==0, 0, ((1+ws["V148"].value)**(1/3))-1)  # =IF(V125=0,0,((1+V148)^(1/3))-1)
     except Exception:
         ws["V149"].value = None
     import gc; gc.collect()
     try:
-        ws["W149"].value = ((1+ws["W148"].value)**(1/3))-1  # =((1+W148)^(1/3))-1
+        ws["W149"].value = excel_IF(ws["W125"].value==0, 0, ((1+ws["W148"].value)**(1/3))-1)  # =IF(W125=0,0,((1+W148)^(1/3))-1)
     except Exception:
         ws["W149"].value = None
     import gc; gc.collect()
     try:
-        ws["X149"].value = ((1+ws["X148"].value)**(1/3))-1  # =((1+X148)^(1/3))-1
+        ws["X149"].value = excel_IF(ws["X125"].value==0, 0, ((1+ws["X148"].value)**(1/3))-1)  # =IF(X125=0,0,((1+X148)^(1/3))-1)
     except Exception:
         ws["X149"].value = None
     import gc; gc.collect()
     try:
-        ws["Y149"].value = ((1+ws["Y148"].value)**(1/3))-1  # =((1+Y148)^(1/3))-1
+        ws["Y149"].value = excel_IF(ws["Y125"].value==0, 0, ((1+ws["Y148"].value)**(1/3))-1)  # =IF(Y125=0,0,((1+Y148)^(1/3))-1)
     except Exception:
         ws["Y149"].value = None
     import gc; gc.collect()
     try:
-        ws["Z149"].value = ((1+ws["Z148"].value)**(1/3))-1  # =((1+Z148)^(1/3))-1
+        ws["Z149"].value = excel_IF(ws["Z125"].value==0, 0, ((1+ws["Z148"].value)**(1/3))-1)  # =IF(Z125=0,0,((1+Z148)^(1/3))-1)
     except Exception:
         ws["Z149"].value = None
     import gc; gc.collect()
     try:
-        ws["AA149"].value = ((1+ws["AA148"].value)**(1/3))-1  # =((1+AA148)^(1/3))-1
+        ws["AA149"].value = excel_IF(ws["AA125"].value==0, 0, ((1+ws["AA148"].value)**(1/3))-1)  # =IF(AA125=0,0,((1+AA148)^(1/3))-1)
     except Exception:
         ws["AA149"].value = None
     import gc; gc.collect()
